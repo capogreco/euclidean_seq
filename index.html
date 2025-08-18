@@ -1,0 +1,2074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Euclidean Tone Generator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Courier New', monospace;
+      background: #f0f0f0;
+      color: #000;
+      padding: 20px;
+      overflow-x: auto;
+    }
+    
+    h1 {
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    
+    .main-container {
+      display: flex;
+      gap: 15px;
+      min-width: 1200px;
+      margin-bottom: 20px;
+      align-items: flex-start;
+    }
+    
+    .tone-column {
+      flex: 1;
+      background: #fff;
+      border: 2px solid #000;
+      padding: 15px;
+      min-height: 500px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .column-title {
+      font-weight: bold;
+      padding: 8px;
+      background: #000;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    
+    .tones-display {
+      flex: 1;
+      display: flex;
+      flex-direction: column-reverse;
+      justify-content: space-between;
+      margin-bottom: 15px;
+      position: relative;
+    }
+    
+    .tone-item {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 2px 0;
+      cursor: pointer;
+      transition: background 0.2s;
+      min-height: 24px;
+    }
+    
+    .tone-item:hover {
+      background: #e0e0e0;
+    }
+    
+    .tone-item.active {
+      font-weight: bold;
+    }
+    
+    .tone-item.inactive {
+      color: #ccc;
+    }
+    
+    .tone-freq {
+      margin-right: 10px;
+      font-size: 14px;
+      width: 70px;
+      text-align: right;
+    }
+    
+    .tone-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #000;
+    }
+    
+    .tone-item.inactive .tone-dot {
+      background: #ddd;
+    }
+    
+    .tone-item.playing {
+      background: #ffeb3b;
+    }
+    
+    .euclidean-control {
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      padding: 8px;
+      border-radius: 4px;
+      width: 100px;
+      flex-shrink: 0;
+    }
+    
+    .euclidean-control h3 {
+      font-size: 12px;
+      margin-bottom: 8px;
+      text-align: center;
+      background: #000;
+      color: #fff;
+      padding: 4px;
+      margin: -8px -8px 8px -8px;
+    }
+    
+    .control {
+      margin: 10px 0;
+    }
+    
+    .control label {
+      font-size: 11px;
+      display: block;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+    
+    .value-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    
+    .value-btn {
+      width: 20px;
+      height: 20px;
+      border: 1px solid #000;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .value-btn:hover {
+      background: #000;
+      color: #fff;
+    }
+    
+    .value-display {
+      flex: 1;
+      text-align: center;
+      font-size: 14px;
+      font-weight: bold;
+      padding: 4px;
+      background: #f0f0f0;
+      border: 1px solid #999;
+      cursor: ns-resize;
+      user-select: none;
+      position: relative;
+    }
+    
+    .value-display:hover {
+      background: #e0e0e0;
+    }
+    
+    .value-display.dragging {
+      background: #d0d0d0;
+      border-color: #000;
+    }
+    
+    .control input[type="number"] {
+      width: 100%;
+      padding: 2px;
+      border: 1px solid #000;
+      font-family: inherit;
+      font-size: 11px;
+    }
+    
+    .play-button {
+      width: 100%;
+      background: #fff;
+      border: 2px solid #000;
+      padding: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: bold;
+    }
+    
+    .play-button:hover {
+      background: #000;
+      color: #fff;
+    }
+    
+    .play-button.playing {
+      background: #4caf50;
+      color: #fff;
+    }
+    
+    .global-settings {
+      background: #fff;
+      border: 2px solid #000;
+      padding: 15px;
+      width: 150px;
+      flex-shrink: 0;
+    }
+    
+    .global-settings h2 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      background: #000;
+      color: #fff;
+      padding: 5px;
+      text-align: center;
+      margin: -15px -15px 10px -15px;
+    }
+    
+    select {
+      padding: 2px;
+      border: 1px solid #000;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    
+    #connectionStatus {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      background: #ff0;
+      border: 1px solid #000;
+      font-size: 12px;
+    }
+    
+    #connectionStatus.connected {
+      background: #0f0;
+    }
+    
+    .sequence-section {
+      background: #fff;
+      border: 2px solid #000;
+      margin-bottom: 20px;
+      padding: 15px;
+    }
+    
+    .sequence-header {
+      background: #000;
+      color: #fff;
+      margin: -15px -15px 15px -15px;
+      padding: 10px;
+      text-align: center;
+    }
+    
+    .sequence-header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    
+    .sequence-visualization {
+      min-height: 200px;
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      margin-bottom: 15px;
+      position: relative;
+      overflow-x: auto;
+      padding: 10px;
+    }
+    
+    .sequence-grid {
+      display: inline-block;
+      border-collapse: collapse;
+      font-size: 11px;
+      min-width: 100%;
+    }
+    
+    .sequence-grid td {
+      width: 30px;
+      height: 24px;
+      border: 1px solid #ddd;
+      text-align: center;
+      vertical-align: middle;
+      position: relative;
+    }
+    
+    .sequence-grid .freq-label {
+      width: 60px;
+      text-align: right;
+      padding-right: 8px;
+      border: none;
+      font-weight: bold;
+      background: #f0f0f0;
+    }
+    
+    .sequence-grid .step-header {
+      font-weight: bold;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+    }
+    
+    .sequence-grid .porta-label {
+      background: #e0e0e0;
+      font-style: italic;
+    }
+    
+    .sequence-grid .active-note {
+      background: #000;
+      border-radius: 50%;
+      width: 12px;
+      height: 12px;
+      margin: auto;
+    }
+    
+    .sequence-grid .porta-active {
+      background: #666;
+      border-radius: 3px;
+      width: 20px;
+      height: 6px;
+      margin: auto;
+    }
+    
+    .sequence-grid .current-column {
+      background: #ffeb3b !important;
+    }
+    
+    .sequence-grid .current-column.active-note {
+      background: #000 !important;
+      box-shadow: 0 0 0 3px #ffeb3b;
+    }
+    
+    .sequence-controls {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    
+    .sequence-control-group {
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 4px;
+      min-width: 120px;
+    }
+    
+    .sequence-control-group h3 {
+      font-size: 12px;
+      margin: -10px -10px 10px -10px;
+      padding: 5px;
+      background: #000;
+      color: #fff;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="connectionStatus">Disconnected</div>
+  
+  <h1>Euclidean Tone Generator</h1>
+  
+  <div class="sequence-section">
+    <div class="sequence-header">
+      <h2>SEQUENCE</h2>
+    </div>
+    <div class="sequence-visualization">
+      <!-- Sequence visualization will go here -->
+    </div>
+    <div class="sequence-controls">
+      <div class="sequence-control-group">
+        <h3>Tempo</h3>
+        <div class="control">
+          <label>CPM</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="cpm" data-delta="-5">−</button>
+            <div class="value-display" id="cpmValue" data-min="10" data-max="240" data-default="30">30</div>
+            <button class="value-btn" data-target="cpm" data-delta="5">+</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="sequence-control-group">
+        <h3>Pattern</h3>
+        <div class="control">
+          <label>Mode</label>
+          <select id="synthMode" style="width: 100%;">
+            <option value="mono">Mono</option>
+            <option value="poly">Poly</option>
+          </select>
+        </div>
+        <div class="control" id="patternStepsControl">
+          <label>Steps</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="patternSteps" data-delta="-1">−</button>
+            <div class="value-display" id="patternStepsValue" data-min="4" data-max="32" data-default="16">16</div>
+            <button class="value-btn" data-target="patternSteps" data-delta="1">+</button>
+          </div>
+        </div>
+        <div class="control">
+          <label>Order</label>
+          <select id="sequenceOrder" style="width: 100%;">
+            <option value="forward">Forward</option>
+            <option value="reverse">Reverse</option>
+            <option value="random">Random</option>
+            <option value="shuffle">Shuffle</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="sequence-control-group poly-only" style="display: none;">
+        <h3>Rhythm</h3>
+        <div class="control">
+          <label>Pulses</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="rhythmPulses" data-delta="-1">−</button>
+            <div class="value-display" id="rhythmPulsesValue" data-min="1" data-max="16" data-default="8">8</div>
+            <button class="value-btn" data-target="rhythmPulses" data-delta="1">+</button>
+          </div>
+        </div>
+        <div class="control">
+          <label>Rotation</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="rhythmRotation" data-delta="-1">−</button>
+            <div class="value-display" id="rhythmRotationValue" data-min="0" data-max="15" data-default="0">0</div>
+            <button class="value-btn" data-target="rhythmRotation" data-delta="1">+</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="sequence-control-group mono-only">
+        <h3>Portamento</h3>
+        <div class="control">
+          <label>Time (ms)</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="portamentoTime" data-delta="-10">−</button>
+            <div class="value-display" id="portamentoTimeValue" data-min="0" data-max="500" data-default="50">50</div>
+            <button class="value-btn" data-target="portamentoTime" data-delta="10">+</button>
+          </div>
+        </div>
+        <div class="control">
+          <label>Steps</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="portamentoSteps" data-delta="-1">−</button>
+            <div class="value-display" id="portamentoStepsValue" data-min="0" data-max="16" data-default="4">4</div>
+            <button class="value-btn" data-target="portamentoSteps" data-delta="1">+</button>
+          </div>
+        </div>
+        <div class="control">
+          <label>Rotation</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="portamentoRotation" data-delta="-1">−</button>
+            <div class="value-display" id="portamentoRotationValue" data-min="0" data-max="15" data-default="0">0</div>
+            <button class="value-btn" data-target="portamentoRotation" data-delta="1">+</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="sequence-control-group poly-only" style="display: none;">
+        <h3>Envelope</h3>
+        <div class="control">
+          <label>Attack (ms)</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="attackTime" data-delta="-5">−</button>
+            <div class="value-display" id="attackTimeValue" data-min="0" data-max="100" data-default="5">5</div>
+            <button class="value-btn" data-target="attackTime" data-delta="5">+</button>
+          </div>
+        </div>
+        <div class="control">
+          <label>Decay (ms)</label>
+          <div class="value-control">
+            <button class="value-btn" data-target="decayTime" data-delta="-10">−</button>
+            <div class="value-display" id="decayTimeValue" data-min="50" data-max="500" data-default="200">200</div>
+            <button class="value-btn" data-target="decayTime" data-delta="10">+</button>
+          </div>
+        </div>
+      </div>
+      
+      <button class="play-button" id="playSequence" style="width: 150px; height: 40px; font-size: 16px;">▶ Play Sequence</button>
+    </div>
+  </div>
+  
+  <div class="main-container">
+    <div class="global-settings">
+      <h2>SETTINGS</h2>
+      <div class="control">
+        <label>EDO (Base Tones)</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="edo" data-delta="-1">−</button>
+          <div class="value-display" id="edoValue" data-min="5" data-max="24" data-default="12">12</div>
+          <button class="value-btn" data-target="edo" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Root Note</label>
+        <select id="rootMode" style="width: 100%; margin-bottom: 4px;">
+          <option value="hz">Hz</option>
+          <option value="midi">MIDI</option>
+        </select>
+        <input type="number" id="rootFreq" value="261.63" step="0.01" style="width: 100%;">
+        <select id="rootMidi" style="width: 100%; display: none;"></select>
+      </div>
+    </div>
+    <div class="tone-column">
+      <div class="column-title">BASE TONES</div>
+      <div class="tones-display" id="baseTones"></div>
+      <button class="play-button" id="playBase">▶ Play</button>
+    </div>
+    
+    <div class="euclidean-control">
+      <h3>EUCLIDEAN 1</h3>
+      <div class="control">
+        <label>Notes</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="scaleNotes" data-delta="-1">−</button>
+          <div class="value-display" id="scaleNotesValue" data-min="1" data-max="12" data-default="7">7</div>
+          <button class="value-btn" data-target="scaleNotes" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Rotation</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="scaleRotation" data-delta="-1">−</button>
+          <div class="value-display" id="scaleRotationValue" data-min="0" data-max="6" data-default="0">0</div>
+          <button class="value-btn" data-target="scaleRotation" data-delta="1">+</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="tone-column">
+      <div class="column-title">SCALE TONES</div>
+      <div class="tones-display" id="scaleTones"></div>
+      <button class="play-button" id="playScale">▶ Play</button>
+    </div>
+    
+    <div class="euclidean-control">
+      <h3>EUCLIDEAN 2</h3>
+      <div class="control">
+        <label>Notes</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="chordNotes" data-delta="-1">−</button>
+          <div class="value-display" id="chordNotesValue" data-min="1" data-max="7" data-default="3">3</div>
+          <button class="value-btn" data-target="chordNotes" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Rotation</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="chordRotation" data-delta="-1">−</button>
+          <div class="value-display" id="chordRotationValue" data-min="0" data-max="2" data-default="0">0</div>
+          <button class="value-btn" data-target="chordRotation" data-delta="1">+</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="tone-column">
+      <div class="column-title">CHORD TONES</div>
+      <div class="tones-display" id="chordTones"></div>
+      <button class="play-button" id="playChord">▶ Play</button>
+    </div>
+    
+    <div class="euclidean-control">
+      <h3>SEQUENCE</h3>
+      <div class="control">
+        <label>Base</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="sequenceBase" data-delta="-1">−</button>
+          <div class="value-display" id="sequenceBaseValue" data-min="-2" data-max="2" data-default="0">0</div>
+          <button class="value-btn" data-target="sequenceBase" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Octaves</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="sequenceOctaves" data-delta="-1">−</button>
+          <div class="value-display" id="sequenceOctavesValue" data-min="1" data-max="4" data-default="2">2</div>
+          <button class="value-btn" data-target="sequenceOctaves" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Notes</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="sequenceNotes" data-delta="-1">−</button>
+          <div class="value-display" id="sequenceNotesValue" data-min="1" data-max="6" data-default="6">6</div>
+          <button class="value-btn" data-target="sequenceNotes" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Method</label>
+        <select id="sequenceMethod" style="width: 100%;">
+          <option value="euclidean">Euclidean</option>
+          <option value="shuffle">Shuffle</option>
+          <option value="random">Random</option>
+        </select>
+      </div>
+      <div class="control" id="sequenceRotationControl" style="display: block;">
+        <label>Rotation</label>
+        <div class="value-control">
+          <button class="value-btn" data-target="sequenceRotation" data-delta="-1">−</button>
+          <div class="value-display" id="sequenceRotationValue" data-min="0" data-max="7" data-default="0">0</div>
+          <button class="value-btn" data-target="sequenceRotation" data-delta="1">+</button>
+        </div>
+      </div>
+      <div class="control" id="sequenceShuffleControl" style="display: none;">
+        <button class="play-button" id="reshuffleButton" style="background: #fff;">↻ Reshuffle</button>
+      </div>
+    </div>
+    
+    <div class="tone-column">
+      <div class="column-title">SEQUENCE TONES</div>
+      <div class="tones-display" id="sequenceTones"></div>
+      <button class="play-button" id="playSequenceTones">▶ Play</button>
+    </div>
+  </div>
+  
+  <script>
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let ws = null;
+    // Import euclidean functions client-side
+    function gcd(a, b) {
+      while (b !== 0) {
+        const temp = b;
+        b = a % b;
+        a = temp;
+      }
+      return a;
+    }
+
+    function euclideanRhythm(pulses, steps) {
+      if (pulses > steps) return [];
+      if (pulses === 0) return new Array(steps).fill(false);
+      if (pulses === steps) return new Array(steps).fill(true);
+      
+      const pattern = [];
+      for (let i = 0; i < steps; i++) {
+        pattern.push([i < pulses]);
+      }
+      
+      let level = 0;
+      while (pattern.length > 1 && pattern.length - pulses > 0) {
+        const count = Math.min(pulses, pattern.length - pulses);
+        for (let i = 0; i < count; i++) {
+          pattern[i].push(...pattern[pattern.length - 1]);
+          pattern.pop();
+        }
+        level++;
+        pulses = pattern.length - count;
+      }
+      
+      return pattern.flat();
+    }
+
+    // Reactive Pipeline Architecture
+    class TonePipeline {
+      constructor() {
+        this.cache = new Map();
+        this.params = {
+          edo: 12,
+          rootFreq: 261.63,
+          scaleNotes: 7,
+          scaleRotation: 0,
+          chordNotes: 4,
+          chordRotation: 0,
+          sequenceNotes: 8,
+          sequenceMethod: 'euclidean',
+          sequenceBase: 0,
+          sequenceOctaves: 2,
+          sequenceRotation: 0
+        };
+        
+        // Cached shuffle orders
+        this.shuffleCache = {
+          mono: null,
+          poly: null
+        };
+      }
+      
+      // Get current data in the old format for compatibility
+      getCurrentData() {
+        const baseTones = this.generateBaseTones(this.params.edo, this.params.rootFreq);
+        const { scaleTones, scaleIndices } = this.generateScaleTones(baseTones, this.params.scaleNotes, this.params.scaleRotation);
+        const { chordTones, chordIndices } = this.generateChordTones(scaleTones, scaleIndices, this.params.chordNotes, this.params.chordRotation);
+        const { sequenceTones, sequenceIndices } = this.generateSequenceTones(chordTones, chordIndices, this.params.sequenceNotes, this.params.sequenceMethod, this.params.sequenceBase, this.params.sequenceOctaves, this.params.sequenceRotation);
+        
+        return {
+          baseTones,
+          scaleTones,
+          scaleIndices,
+          chordTones,
+          chordIndices,
+          sequenceTones,
+          sequenceIndices
+        };
+      }
+      
+      updateParam(paramName, value) {
+        this.params[paramName] = value;
+        
+        // Clear shuffle cache when tones change
+        if (['edo', 'rootFreq', 'scaleNotes', 'scaleRotation', 'chordNotes', 'chordRotation', 'sequenceNotes', 'sequenceMethod', 'sequenceBase', 'sequenceOctaves', 'sequenceRotation'].includes(paramName)) {
+          this.shuffleCache.mono = null;
+          this.shuffleCache.poly = null;
+        }
+      }
+    }
+
+    // Add tone generation methods to the pipeline
+    TonePipeline.prototype.generateBaseTones = function(edo, rootFreq) {
+      const tones = [];
+      for (let i = 0; i <= edo; i++) {
+        tones.push(rootFreq * Math.pow(2, i / edo));
+      }
+      return tones;
+    };
+
+    TonePipeline.prototype.generateScaleTones = function(baseTones, scaleNotes, scaleRotation) {
+      const edo = baseTones.length - 1;
+      const pattern = euclideanRhythm(scaleNotes, edo);
+      
+      // Get original positions
+      const originalPositions = [];
+      pattern.forEach((hasNote, index) => {
+        if (hasNote) {
+          originalPositions.push(index);
+        }
+      });
+      
+      if (originalPositions.length === 0) {
+        return { scaleTones: new Array(edo + 1).fill(0), scaleIndices: [] };
+      }
+      
+      // Calculate intervals
+      const originalIntervals = [];
+      for (let i = 0; i < originalPositions.length; i++) {
+        const current = originalPositions[i];
+        const next = originalPositions[(i + 1) % originalPositions.length];
+        const interval = next > current ? next - current : edo - current + next;
+        originalIntervals.push(interval);
+      }
+      
+      // Apply rotation
+      let rotatedIntervals = [...originalIntervals];
+      if (scaleRotation > 0 && originalIntervals.length > 0) {
+        const rot = scaleRotation % originalIntervals.length;
+        rotatedIntervals = [...originalIntervals.slice(rot), ...originalIntervals.slice(0, rot)];
+      }
+      
+      // Build scale from intervals
+      const steps = [0];
+      let currentStep = 0;
+      for (let i = 0; i < rotatedIntervals.length - 1; i++) {
+        currentStep += rotatedIntervals[i];
+        steps.push(currentStep);
+      }
+      
+      // Create scale tones array and indices
+      const scaleTones = new Array(edo + 1).fill(0);
+      const scaleIndices = [];
+      steps.forEach(step => {
+        if (step <= edo) {
+          scaleTones[step] = baseTones[step];
+          scaleIndices.push(step);
+        }
+      });
+      
+      // Add octave
+      scaleTones[edo] = baseTones[edo];
+      if (!scaleIndices.includes(edo)) {
+        scaleIndices.push(edo);
+      }
+      
+      return { scaleTones, scaleIndices };
+    };
+
+    TonePipeline.prototype.generateChordTones = function(scaleTones, scaleIndices, chordNotes, chordRotation) {
+      const edo = scaleTones.length - 1;
+      const activeScaleTones = scaleIndices.filter(s => s < edo);
+      
+      if (activeScaleTones.length === 0) {
+        return { chordTones: new Array(edo + 1).fill(0), chordIndices: [] };
+      }
+      
+      const chordPattern = euclideanRhythm(chordNotes, activeScaleTones.length);
+      
+      // Get original positions
+      const originalPositions = [];
+      chordPattern.forEach((hasNote, index) => {
+        if (hasNote) {
+          originalPositions.push(index);
+        }
+      });
+      
+      if (originalPositions.length === 0) {
+        return { chordTones: new Array(edo + 1).fill(0), chordIndices: [] };
+      }
+      
+      // Calculate intervals
+      const originalIntervals = [];
+      for (let i = 0; i < originalPositions.length; i++) {
+        const current = originalPositions[i];
+        const next = originalPositions[(i + 1) % originalPositions.length];
+        const interval = next > current ? next - current : activeScaleTones.length - current + next;
+        originalIntervals.push(interval);
+      }
+      
+      // Apply rotation
+      let rotatedIntervals = [...originalIntervals];
+      if (chordRotation > 0 && originalIntervals.length > 0) {
+        const rot = chordRotation % originalIntervals.length;
+        rotatedIntervals = [...originalIntervals.slice(rot), ...originalIntervals.slice(0, rot)];
+      }
+      
+      // Build chord positions
+      const chordPositions = [0];
+      let currentPosition = 0;
+      for (let i = 0; i < rotatedIntervals.length - 1; i++) {
+        currentPosition += rotatedIntervals[i];
+        if (currentPosition < activeScaleTones.length) {
+          chordPositions.push(currentPosition);
+        }
+      }
+      
+      // Map to actual chord tones
+      const chordTones = new Array(edo + 1).fill(0);
+      const chordIndices = [];
+      
+      chordPositions.forEach(position => {
+        const step = activeScaleTones[position];
+        chordTones[step] = scaleTones[step];
+        chordIndices.push(step);
+      });
+      
+      // Add octave if it was in the scale
+      if (scaleIndices.includes(edo)) {
+        chordTones[edo] = scaleTones[edo];
+        if (!chordIndices.includes(edo)) {
+          chordIndices.push(edo);
+        }
+      }
+      
+      return { chordTones, chordIndices };
+    };
+
+    TonePipeline.prototype.generateSequenceTones = function(chordTones, chordIndices, sequenceNotes, sequenceMethod, sequenceBase, sequenceOctaves, sequenceRotation) {
+      const edo = chordTones.length - 1;
+      
+      if (sequenceNotes === undefined || sequenceBase === undefined || sequenceOctaves === undefined) {
+        return { sequenceTones: [], sequenceIndices: [] };
+      }
+      
+      // Expand chord tones across octaves
+      const expandedTones = [];
+      
+      const minOctave = sequenceBase;
+      const maxOctave = sequenceBase + sequenceOctaves - 1;
+      
+      for (let octave = minOctave; octave <= maxOctave; octave++) {
+        chordIndices.forEach(index => {
+          if (index < edo) {
+            const baseTone = chordTones[index];
+            if (baseTone > 0) {
+              const freq = baseTone * Math.pow(2, octave);
+              expandedTones.push(freq);
+            }
+          }
+        });
+      }
+      
+      if (expandedTones.length === 0) {
+        return { sequenceTones: [], sequenceIndices: [] };
+      }
+      
+      // Select subset using chosen method
+      let selectedIndices = [];
+      
+      if (sequenceMethod === 'euclidean') {
+        const numToSelect = Math.min(sequenceNotes, expandedTones.length);
+        const pattern = euclideanRhythm(numToSelect, expandedTones.length);
+        
+        // Apply rotation
+        let rotatedPattern = [...pattern];
+        if (sequenceRotation && sequenceRotation > 0) {
+          const rot = sequenceRotation % expandedTones.length;
+          rotatedPattern = [...pattern.slice(rot), ...pattern.slice(0, rot)];
+        }
+        
+        rotatedPattern.forEach((select, i) => {
+          if (select) {
+            selectedIndices.push(i);
+          }
+        });
+      } else if (sequenceMethod === 'random') {
+        const numToSelect = Math.min(sequenceNotes, expandedTones.length);
+        const available = [...Array(expandedTones.length).keys()];
+        for (let i = 0; i < numToSelect; i++) {
+          const randomIndex = Math.floor(Math.random() * available.length);
+          selectedIndices.push(available[randomIndex]);
+          available.splice(randomIndex, 1);
+        }
+        selectedIndices.sort((a, b) => a - b);
+      }
+      
+      // Return selected tones
+      const sequenceTones = expandedTones.map((freq, i) => 
+        selectedIndices.includes(i) ? freq : 0
+      );
+      
+      return { sequenceTones, sequenceIndices: selectedIndices };
+    };
+
+    // Global pipeline instance
+    const pipeline = new TonePipeline();
+    
+    // Compatibility layer - acts like the old currentData
+    let currentData = new Proxy({}, {
+      get(target, prop) {
+        if (prop === 'sequenceIndices') {
+          return pipeline.getCurrentData().sequenceIndices;
+        }
+        return pipeline.getCurrentData()[prop];
+      }
+    });
+    let playIntervals = {
+      base: null,
+      scale: null,
+      chord: null,
+      sequence: null
+    };
+    let playIndices = {
+      base: 0,
+      scale: 0,
+      chord: 0,
+      sequence: 0
+    };
+    
+    // Sequence pattern data
+    let sequencePattern = {
+      steps: [],
+      rhythm: [],
+      portamento: [],
+      currentStep: 0
+    };
+    let sequenceInterval = null;
+    
+    // Mono synth persistent audio nodes
+    let monoOsc = null;
+    let monoGain = null;
+    let currentMonoFreq = null;
+    
+    // Store shuffled order to keep it stable
+    let currentShuffledTones = null;
+    let currentShuffledTonesForPoly = null;
+    
+    function generateSequencePattern() {
+      const mode = document.getElementById('synthMode').value;
+      const order = document.getElementById('sequenceOrder').value;
+      
+      let patternSteps, rhythmPulses, rhythmRotation, portamentoSteps, portamentoRotation;
+      
+      if (mode === 'mono') {
+        // Mono mode: steps = number of sequence tones, no rhythm pattern
+        const activeToneCount = currentData.sequenceIndices ? currentData.sequenceIndices.length : 0;
+        patternSteps = activeToneCount;
+        rhythmPulses = patternSteps; // All steps active in mono
+        rhythmRotation = 0;
+        portamentoSteps = parseInt(document.getElementById('portamentoStepsValue').textContent);
+        portamentoRotation = parseInt(document.getElementById('portamentoRotationValue').textContent);
+      } else {
+        // Poly mode: use UI values
+        patternSteps = parseInt(document.getElementById('patternStepsValue').textContent);
+        rhythmPulses = parseInt(document.getElementById('rhythmPulsesValue').textContent);
+        rhythmRotation = parseInt(document.getElementById('rhythmRotationValue').textContent);
+        portamentoSteps = 0; // No portamento in poly mode
+        portamentoRotation = 0;
+      }
+      
+      // Get active sequence tones (the selected subset from the expanded pool)
+      const activeTones = [];
+      if (currentData.sequenceTones && currentData.sequenceIndices) {
+        // Collect all non-zero tones in order
+        for (let i = 0; i < currentData.sequenceTones.length; i++) {
+          if (currentData.sequenceTones[i] > 0 && currentData.sequenceIndices.includes(i)) {
+            activeTones.push(currentData.sequenceTones[i]);
+          }
+        }
+      }
+      
+      if (activeTones.length === 0) {
+        console.log('No active tones found. Make sure to generate tones first.');
+        return;
+      }
+      
+      console.log(`Generating pattern with ${activeTones.length} tones, mode: ${mode}`);
+      
+      // Generate rhythm pattern
+      let rhythm = euclideanRhythm(rhythmPulses, patternSteps);
+      if (rhythmRotation > 0) {
+        const rot = rhythmRotation % patternSteps;
+        rhythm = [...rhythm.slice(rot), ...rhythm.slice(0, rot)];
+      }
+      
+      // Generate portamento pattern
+      let portamento = new Array(patternSteps).fill(false);
+      if (portamentoSteps > 0 && patternSteps > 0) {
+        // Ensure portamento steps don't exceed pattern steps
+        const actualPortamentoSteps = Math.min(portamentoSteps, patternSteps);
+        const portaPattern = euclideanRhythm(actualPortamentoSteps, patternSteps);
+        if (portamentoRotation > 0) {
+          const rot = portamentoRotation % patternSteps;
+          portamento = [...portaPattern.slice(rot), ...portaPattern.slice(0, rot)];
+        } else {
+          portamento = portaPattern;
+        }
+      }
+      
+      // Generate note order
+      const steps = [];
+      let noteCounter = 0;
+      
+      // Handle ordering differently for mono vs poly
+      // mode is already declared at the top of the function
+      
+      if (mode === 'mono') {
+        // Mono: simple ordering of tones
+        let orderedTones = [...activeTones];
+        
+        switch (order) {
+          case 'forward': // Ascending frequency
+            orderedTones.sort((a, b) => a - b);
+            pipeline.shuffleCache.mono = null; // Clear shuffle cache
+            break;
+          case 'reverse': // Descending frequency
+            orderedTones.sort((a, b) => b - a);
+            pipeline.shuffleCache.mono = null; // Clear shuffle cache
+            break;
+          case 'shuffle':
+            // Use existing shuffle or create new one
+            if (!pipeline.shuffleCache.mono || pipeline.shuffleCache.mono.length !== orderedTones.length) {
+              pipeline.shuffleCache.mono = [...orderedTones];
+              for (let i = pipeline.shuffleCache.mono.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pipeline.shuffleCache.mono[i], pipeline.shuffleCache.mono[j]] = [pipeline.shuffleCache.mono[j], pipeline.shuffleCache.mono[i]];
+              }
+            }
+            orderedTones = [...pipeline.shuffleCache.mono];
+            break;
+          default: // 'random' keeps original selection order
+            pipeline.shuffleCache.mono = null;
+        }
+        
+        // In mono, all steps have notes (no rests)
+        for (let i = 0; i < patternSteps; i++) {
+          steps.push(orderedTones[i % orderedTones.length]);
+        }
+        
+        // Update portamento steps max based on actual pattern steps
+        document.getElementById('portamentoStepsValue').dataset.max = patternSteps;
+        const currentPortamentoSteps = parseInt(document.getElementById('portamentoStepsValue').textContent);
+        if (currentPortamentoSteps > patternSteps) {
+          document.getElementById('portamentoStepsValue').textContent = patternSteps;
+        }
+      } else {
+        // Poly mode: existing logic with rhythm pattern
+        let shuffledTones = [...activeTones];
+        if (order === 'shuffle') {
+          // Use existing shuffle or create new one
+          if (!pipeline.shuffleCache.poly || pipeline.shuffleCache.poly.length !== activeTones.length) {
+            pipeline.shuffleCache.poly = [...activeTones];
+            for (let i = pipeline.shuffleCache.poly.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [pipeline.shuffleCache.poly[i], pipeline.shuffleCache.poly[j]] = [pipeline.shuffleCache.poly[j], pipeline.shuffleCache.poly[i]];
+            }
+          }
+          shuffledTones = [...pipeline.shuffleCache.poly];
+        } else {
+          pipeline.shuffleCache.poly = null; // Clear shuffle cache for non-shuffle modes
+        }
+        
+        for (let i = 0; i < patternSteps; i++) {
+          if (rhythm[i]) {
+            let noteIndex;
+            switch (order) {
+              case 'forward':
+                noteIndex = noteCounter % activeTones.length;
+                steps.push(activeTones[noteIndex]);
+                noteCounter++;
+                break;
+              case 'reverse':
+                noteIndex = (activeTones.length - 1) - (noteCounter % activeTones.length);
+                steps.push(activeTones[noteIndex]);
+                noteCounter++;
+                break;
+              case 'random':
+                noteIndex = Math.floor(Math.random() * activeTones.length);
+                steps.push(activeTones[noteIndex]);
+                break;
+              case 'shuffle':
+                noteIndex = noteCounter % shuffledTones.length;
+                steps.push(shuffledTones[noteIndex]);
+                noteCounter++;
+                break;
+              default:
+                noteIndex = noteCounter % activeTones.length;
+                steps.push(activeTones[noteIndex]);
+                noteCounter++;
+            }
+          } else {
+            steps.push(null); // Rest
+          }
+        }
+      }
+      
+      sequencePattern = {
+        steps,
+        rhythm,
+        portamento,
+        currentStep: 0
+      };
+    }
+
+    // Update only the portamento pattern without changing the note order
+    function updatePortamentoPattern() {
+      if (!sequencePattern.steps || sequencePattern.steps.length === 0) return;
+      
+      const patternSteps = sequencePattern.steps.length;
+      const portamentoSteps = parseInt(document.getElementById('portamentoStepsValue').textContent);
+      const portamentoRotation = parseInt(document.getElementById('portamentoRotationValue').textContent);
+      
+      // Generate new portamento pattern
+      let portamento = new Array(patternSteps).fill(false);
+      if (portamentoSteps > 0 && patternSteps > 0) {
+        // Ensure portamento steps don't exceed pattern steps
+        const actualPortamentoSteps = Math.min(portamentoSteps, patternSteps);
+        const portaPattern = euclideanRhythm(actualPortamentoSteps, patternSteps);
+        if (portamentoRotation > 0) {
+          const rot = portamentoRotation % patternSteps;
+          portamento = [...portaPattern.slice(rot), ...portaPattern.slice(0, rot)];
+        } else {
+          portamento = portaPattern;
+        }
+      }
+      
+      // Update only the portamento pattern, keep existing steps and rhythm
+      sequencePattern.portamento = portamento;
+    }
+    
+    function euclideanRhythm(pulses, steps) {
+      if (pulses > steps) return new Array(steps).fill(true);
+      if (pulses === 0) return new Array(steps).fill(false);
+      if (pulses === steps) return new Array(steps).fill(true);
+      
+      const pattern = [];
+      for (let i = 0; i < steps; i++) {
+        pattern.push([i < pulses]);
+      }
+      
+      let level = 0;
+      while (pattern.length > 1 && pattern.length - pulses > 0) {
+        const count = Math.min(pulses, pattern.length - pulses);
+        for (let i = 0; i < count; i++) {
+          pattern[i].push(...pattern[pattern.length - 1]);
+          pattern.pop();
+        }
+        level++;
+        pulses = pattern.length - count;
+      }
+      
+      return pattern.flat();
+    }
+    
+    function updateSequenceVisualization() {
+      const container = document.querySelector('.sequence-visualization');
+      if (!container) {
+        console.log('No visualization container found');
+        return;
+      }
+      if (!sequencePattern.steps || sequencePattern.steps.length === 0) {
+        console.log('No sequence pattern to visualize');
+        return;
+      }
+      
+      // Get unique frequencies from sequence pattern
+      const uniqueFreqs = [...new Set(sequencePattern.steps.filter(f => f !== null))].sort((a, b) => b - a);
+      
+      // Create grid table
+      let html = '<table class="sequence-grid">';
+      
+      // Step headers row
+      html += '<tr><td class="freq-label"></td>';
+      for (let i = 0; i < sequencePattern.steps.length; i++) {
+        html += `<td class="step-header">${i + 1}</td>`;
+      }
+      html += '</tr>';
+      
+      // Portamento row
+      html += '<tr><td class="freq-label porta-label">Porta</td>';
+      for (let i = 0; i < sequencePattern.portamento.length; i++) {
+        const isActive = sequencePattern.portamento[i];
+        const isCurrent = i === sequencePattern.currentStep;
+        html += `<td class="porta-cell ${isCurrent ? 'current-column' : ''}">`;
+        if (isActive) {
+          html += '<div class="porta-active"></div>';
+        }
+        html += '</td>';
+      }
+      html += '</tr>';
+      
+      // Frequency rows
+      uniqueFreqs.forEach(freq => {
+        html += `<tr><td class="freq-label">${freq.toFixed(2)}</td>`;
+        for (let i = 0; i < sequencePattern.steps.length; i++) {
+          const isActive = sequencePattern.steps[i] === freq;
+          const isCurrent = i === sequencePattern.currentStep;
+          html += `<td class="note-cell ${isCurrent ? 'current-column' : ''}">`;
+          if (isActive) {
+            html += `<div class="active-note ${isCurrent ? 'current-note' : ''}"></div>`;
+          }
+          html += '</td>';
+        }
+        html += '</tr>';
+      });
+      
+      html += '</table>';
+      container.innerHTML = html;
+    }
+    
+    function updateSequenceNotesMax() {
+      // Calculate max based on chord tones × octaves
+      const chordCount = currentData.chordIndices ? 
+        currentData.chordIndices.filter(idx => idx < (currentData.baseTones ? currentData.baseTones.length - 1 : 12)).length : 3;
+      const octaves = parseInt(document.getElementById('sequenceOctavesValue').textContent);
+      const maxNotes = chordCount * octaves;
+      
+      const sequenceNotesDisplay = document.getElementById('sequenceNotesValue');
+      sequenceNotesDisplay.dataset.max = maxNotes;
+      
+      // Adjust current value if it exceeds new max
+      const currentNotes = parseInt(sequenceNotesDisplay.textContent);
+      if (currentNotes > maxNotes) {
+        sequenceNotesDisplay.textContent = maxNotes;
+      }
+      
+      // Also update rotation max
+      const newNotesValue = parseInt(sequenceNotesDisplay.textContent);
+      document.getElementById('sequenceRotationValue').dataset.max = Math.max(0, newNotesValue - 1);
+    }
+    
+    // Function to update sequence playback when parameters change
+    function updateSequencePlayback() {
+      if (sequenceInterval) {
+        // Restart the interval with new timing
+        clearInterval(sequenceInterval);
+        
+        const mode = document.getElementById('synthMode').value;
+        const cpm = parseInt(document.getElementById('cpmValue').textContent);
+        const stepsPerCycle = sequencePattern.steps.length;
+        const msPerStep = (60000 / cpm) / stepsPerCycle;
+        
+        if (mode === 'mono') {
+          const playMonoStep = () => {
+            const step = sequencePattern.currentStep;
+            const freq = sequencePattern.steps[step];
+            
+            updateSequenceVisualization();
+            
+            if (freq && monoOsc) {
+              const hasPortamento = sequencePattern.portamento[step];
+              const now = audioContext.currentTime;
+              
+              if (hasPortamento && currentMonoFreq && currentMonoFreq !== freq) {
+                monoOsc.frequency.cancelScheduledValues(now);
+                monoOsc.frequency.setValueAtTime(monoOsc.frequency.value, now);
+                const portamentoTime = parseInt(document.getElementById('portamentoTimeValue').textContent);
+                monoOsc.frequency.exponentialRampToValueAtTime(freq, now + (portamentoTime/1000));
+              } else {
+                monoOsc.frequency.cancelScheduledValues(now);
+                monoOsc.frequency.setValueAtTime(freq, now);
+              }
+              currentMonoFreq = freq;
+            }
+            
+            sequencePattern.currentStep = (sequencePattern.currentStep + 1) % sequencePattern.steps.length;
+          };
+          
+          sequenceInterval = setInterval(playMonoStep, msPerStep);
+        } else {
+          const playPolyStep = () => {
+            const step = sequencePattern.currentStep;
+            const freq = sequencePattern.steps[step];
+            
+            updateSequenceVisualization();
+            
+            if (freq) {
+              const attackTime = parseInt(document.getElementById('attackTimeValue').textContent);
+              const decayTime = parseInt(document.getElementById('decayTimeValue').textContent);
+              
+              const osc = audioContext.createOscillator();
+              const gain = audioContext.createGain();
+              
+              osc.connect(gain);
+              gain.connect(audioContext.destination);
+              
+              osc.frequency.value = freq;
+              osc.type = 'sine';
+              
+              gain.gain.setValueAtTime(0, audioContext.currentTime);
+              gain.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + attackTime/1000);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + (attackTime + decayTime)/1000);
+              
+              osc.start(audioContext.currentTime);
+              osc.stop(audioContext.currentTime + (attackTime + decayTime)/1000);
+            }
+            
+            sequencePattern.currentStep = (sequencePattern.currentStep + 1) % sequencePattern.steps.length;
+          };
+          
+          sequenceInterval = setInterval(playPolyStep, msPerStep);
+        }
+      }
+    }
+    
+    function playSequence() {
+      const button = document.getElementById('playSequence');
+      const mode = document.getElementById('synthMode').value;
+      
+      if (sequenceInterval) {
+        clearInterval(sequenceInterval);
+        sequenceInterval = null;
+        button.textContent = '▶ Play Sequence';
+        button.classList.remove('playing');
+        sequencePattern.currentStep = 0;
+        updateSequenceVisualization();
+        
+        // Stop mono oscillator if running
+        if (mode === 'mono' && monoOsc) {
+          monoOsc.stop();
+          monoOsc = null;
+          monoGain = null;
+        }
+        return;
+      }
+      
+      generateSequencePattern();
+      
+      if (!sequencePattern.steps || sequencePattern.steps.length === 0) {
+        console.log('No sequence pattern generated');
+        return;
+      }
+      
+      button.textContent = '■ Stop';
+      button.classList.add('playing');
+      
+      // Calculate interval from CPM (Cycles Per Minute)
+      const cpm = parseInt(document.getElementById('cpmValue').textContent);
+      const stepsPerCycle = sequencePattern.steps.length;
+      const msPerStep = (60000 / cpm) / stepsPerCycle;
+      
+      if (mode === 'mono') {
+        // Create persistent oscillator for mono mode
+        monoOsc = audioContext.createOscillator();
+        monoGain = audioContext.createGain();
+        
+        monoOsc.connect(monoGain);
+        monoGain.connect(audioContext.destination);
+        
+        monoOsc.type = 'sine';
+        monoGain.gain.value = 0.3;
+        
+        // Start with first frequency
+        const firstFreq = sequencePattern.steps[0];
+        if (firstFreq) {
+          monoOsc.frequency.value = firstFreq;
+          currentMonoFreq = firstFreq;
+        }
+        
+        monoOsc.start();
+        
+        const playMonoStep = () => {
+          const step = sequencePattern.currentStep;
+          const freq = sequencePattern.steps[step];
+          
+          // Update visual BEFORE playing the note
+          updateSequenceVisualization();
+          
+          if (freq && monoOsc) {
+            // Check if THIS step should be reached with portamento
+            const hasPortamento = sequencePattern.portamento[step];
+            
+            // Get current time once for consistency
+            const now = audioContext.currentTime;
+            
+            if (hasPortamento && currentMonoFreq && currentMonoFreq !== freq) {
+              // Correct sequence for portamento (from the document)
+              // 1. Cancel future scheduled values
+              monoOsc.frequency.cancelScheduledValues(now);
+              // 2. Pin current value (reads value AFTER cancellation)
+              monoOsc.frequency.setValueAtTime(monoOsc.frequency.value, now);
+              // 3. Schedule exponential ramp to target
+              const portamentoTime = parseInt(document.getElementById('portamentoTimeValue').textContent);
+              monoOsc.frequency.exponentialRampToValueAtTime(freq, now + (portamentoTime/1000));
+            } else {
+              // Instant frequency change
+              monoOsc.frequency.cancelScheduledValues(now);
+              monoOsc.frequency.setValueAtTime(freq, now);
+            }
+            currentMonoFreq = freq;
+          }
+          
+          sequencePattern.currentStep = (sequencePattern.currentStep + 1) % sequencePattern.steps.length;
+        };
+        
+        playMonoStep();
+        sequenceInterval = setInterval(playMonoStep, msPerStep);
+        
+      } else {
+        // Poly mode - use existing note triggering
+        let previousFreq = null;
+        
+        const playPolyStep = () => {
+          const step = sequencePattern.currentStep;
+          const freq = sequencePattern.steps[step];
+          
+          // Update visual BEFORE playing the note
+          updateSequenceVisualization();
+          
+          if (freq) {
+            const attackTime = parseInt(document.getElementById('attackTimeValue').textContent);
+            const decayTime = parseInt(document.getElementById('decayTimeValue').textContent);
+            
+            // Create oscillator with envelope
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            osc.frequency.value = freq;
+            osc.type = 'sine';
+            
+            // Apply attack/decay envelope
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + attackTime/1000);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + (attackTime + decayTime)/1000);
+            
+            osc.start(audioContext.currentTime);
+            osc.stop(audioContext.currentTime + (attackTime + decayTime)/1000);
+            
+            previousFreq = freq;
+          }
+          
+          sequencePattern.currentStep = (sequencePattern.currentStep + 1) % sequencePattern.steps.length;
+        };
+        
+        playPolyStep();
+        sequenceInterval = setInterval(playPolyStep, msPerStep);
+      }
+    }
+    
+    function connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      
+      try {
+        ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => {
+        document.getElementById('connectionStatus').textContent = 'Connected';
+        document.getElementById('connectionStatus').classList.add('connected');
+      };
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        switch (data.type) {
+          case 'connected':
+            if (data.defaultParams) {
+              updateParams(data.defaultParams);
+            }
+            generateTones();
+            break;
+            
+          // Remove 'tones' case - now handled client-side
+            
+          case 'error':
+            console.error('Server error:', data.message);
+            break;
+        }
+      };
+      
+      ws.onclose = () => {
+        document.getElementById('connectionStatus').textContent = 'Disconnected';
+        document.getElementById('connectionStatus').classList.remove('connected');
+        setTimeout(connectWebSocket, 2000);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        document.getElementById('connectionStatus').textContent = 'Connection Error';
+      };
+      
+      } catch (error) {
+        console.error('Failed to create WebSocket:', error);
+        document.getElementById('connectionStatus').textContent = 'Connection Failed';
+      }
+    }
+    
+    function updateParams(params) {
+      if (params.edo !== undefined) {
+        document.getElementById('edoValue').textContent = params.edo;
+      }
+      if (params.rootFreq !== undefined) {
+        document.getElementById('rootFreq').value = params.rootFreq;
+      }
+    }
+    
+    function midiToFreq(midiNote) {
+      return 440 * Math.pow(2, (midiNote - 69) / 12);
+    }
+    
+    function freqToMidi(freq) {
+      return Math.round(69 + 12 * Math.log2(freq / 440));
+    }
+    
+    function getRootFrequency() {
+      const mode = document.getElementById('rootMode').value;
+      if (mode === 'hz') {
+        return parseFloat(document.getElementById('rootFreq').value);
+      } else {
+        const midiNote = parseInt(document.getElementById('rootMidi').value);
+        return midiToFreq(midiNote);
+      }
+    }
+    
+    function populateMidiDropdown() {
+      const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const select = document.getElementById('rootMidi');
+      select.innerHTML = '';
+      
+      for (let midi = 24; midi <= 96; midi++) {
+        const octave = Math.floor(midi / 12) - 1;
+        const noteIndex = midi % 12;
+        const option = document.createElement('option');
+        option.value = midi;
+        option.textContent = `${noteNames[noteIndex]}${octave}`;
+        select.appendChild(option);
+      }
+      
+      select.value = '60';
+    }
+    
+    function generateTones() {
+      // Update pipeline parameters
+      pipeline.updateParam('edo', parseInt(document.getElementById('edoValue').textContent));
+      pipeline.updateParam('scaleNotes', parseInt(document.getElementById('scaleNotesValue').textContent));
+      pipeline.updateParam('scaleRotation', parseInt(document.getElementById('scaleRotationValue').textContent));
+      pipeline.updateParam('chordNotes', parseInt(document.getElementById('chordNotesValue').textContent));
+      pipeline.updateParam('chordRotation', parseInt(document.getElementById('chordRotationValue').textContent));
+      pipeline.updateParam('rootFreq', getRootFrequency());
+      pipeline.updateParam('sequenceNotes', parseInt(document.getElementById('sequenceNotesValue').textContent));
+      pipeline.updateParam('sequenceMethod', document.getElementById('sequenceMethod').value);
+      pipeline.updateParam('sequenceBase', parseInt(document.getElementById('sequenceBaseValue').textContent));
+      pipeline.updateParam('sequenceOctaves', parseInt(document.getElementById('sequenceOctavesValue').textContent));
+      pipeline.updateParam('sequenceRotation', parseInt(document.getElementById('sequenceRotationValue').textContent));
+      
+      // Update displays
+      updateTonesDisplay();
+      
+      // If sequence is playing, update it in real-time
+      if (sequenceInterval) {
+        const currentStep = sequencePattern.currentStep;
+        generateSequencePattern();
+        sequencePattern.currentStep = currentStep;
+        updateSequenceVisualization();
+      }
+    }
+    
+    function updateTonesDisplay() {
+      const data = pipeline.getCurrentData();
+      
+      // Reset play indices if the number of tones changed
+      if (data.scaleIndices && playIndices.scale >= data.scaleIndices.length) {
+        playIndices.scale = 0;
+      }
+      if (data.chordIndices && playIndices.chord >= data.chordIndices.length) {
+        playIndices.chord = 0;
+      }
+      
+      displayColumn('baseTones', data.baseTones, true);
+      displayColumn('scaleTones', data.scaleTones, data.scaleIndices);
+      displayColumn('chordTones', data.chordTones, data.chordIndices);
+      displayColumn('sequenceTones', data.sequenceTones, data.sequenceIndices);
+      
+      // Update sequence notes max when chord tones change
+      updateSequenceNotesMax();
+    }
+    
+    function displayTones() {
+      updateTonesDisplay();
+    }
+    
+    function displayColumn(columnId, frequencies, activeIndices) {
+      const container = document.getElementById(columnId);
+      container.innerHTML = '';
+      
+      if (!frequencies || frequencies.length === 0) return;
+      
+      // If activeIndices is true, all are active
+      // If it's an array, only those indices are active
+      const isActive = (index) => {
+        if (activeIndices === true) return true;
+        if (Array.isArray(activeIndices)) return activeIndices.includes(index);
+        return false;
+      };
+      
+      frequencies.forEach((freq, index) => {
+        const item = document.createElement('div');
+        item.className = 'tone-item';
+        if (isActive(index)) {
+          item.classList.add('active');
+        } else {
+          item.classList.add('inactive');
+        }
+        
+        const freqSpan = document.createElement('span');
+        freqSpan.className = 'tone-freq';
+        freqSpan.textContent = freq > 0 ? freq.toFixed(2) : '';
+        
+        const dot = document.createElement('div');
+        dot.className = 'tone-dot';
+        
+        item.appendChild(freqSpan);
+        item.appendChild(dot);
+        
+        if (freq > 0) {
+          item.onclick = () => playNote(freq);
+        }
+        
+        container.appendChild(item);
+      });
+    }
+    
+    function playNote(frequency, duration = 200, portamentoTime = 0, previousFreq = null) {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      
+      if (portamentoTime > 0 && previousFreq) {
+        osc.frequency.setValueAtTime(previousFreq, audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(frequency, audioContext.currentTime + portamentoTime/1000);
+      } else {
+        osc.frequency.value = frequency;
+      }
+      osc.type = 'sine';
+      
+      gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration/1000);
+      
+      osc.start(audioContext.currentTime);
+      osc.stop(audioContext.currentTime + duration/1000);
+    }
+    
+    function togglePlay(type) {
+      const button = document.getElementById(`play${type.charAt(0).toUpperCase() + type.slice(1)}`);
+      
+      if (playIntervals[type]) {
+        clearInterval(playIntervals[type]);
+        playIntervals[type] = null;
+        playIndices[type] = 0;
+        button.textContent = '▶ Play';
+        button.classList.remove('playing');
+        document.querySelectorAll(`#${type}Tones .tone-item`).forEach(item => {
+          item.classList.remove('playing');
+        });
+      } else {
+        const tones = currentData[`${type}Tones`];
+        const indices = type === 'base' ? 
+          tones.map((_, i) => i) : 
+          type === 'scale' ? 
+            currentData.scaleIndices : 
+            type === 'chord' ?
+              currentData.chordIndices :
+              currentData.sequenceIndices;
+        
+        if (!tones || !indices || indices.length === 0) return;
+        
+        button.textContent = '■ Stop';
+        button.classList.add('playing');
+        
+        const playNext = () => {
+          // Get fresh data each time
+          const currentTones = currentData[`${type}Tones`];
+          const currentIndices = type === 'base' ? 
+            currentTones.map((_, i) => i) : 
+            type === 'scale' ? 
+              currentData.scaleIndices : 
+              type === 'chord' ?
+                currentData.chordIndices :
+                currentData.sequenceIndices;
+          
+          if (!currentIndices || currentIndices.length === 0) {
+            clearInterval(playIntervals[type]);
+            playIntervals[type] = null;
+            button.textContent = '▶ Play';
+            button.classList.remove('playing');
+            return;
+          }
+          
+          // Ensure index is within bounds
+          if (playIndices[type] >= currentIndices.length) {
+            playIndices[type] = 0;
+          }
+          
+          const items = document.querySelectorAll(`#${type}Tones .tone-item`);
+          items.forEach(item => item.classList.remove('playing'));
+          
+          const currentIndex = currentIndices[playIndices[type]];
+          if (items[currentIndex]) {
+            items[currentIndex].classList.add('playing');
+          }
+          
+          const freq = currentTones[currentIndex];
+          if (freq > 0) {
+            playNote(freq, 180);
+          }
+          
+          playIndices[type] = (playIndices[type] + 1) % currentIndices.length;
+        };
+        
+        playNext();
+        playIntervals[type] = setInterval(playNext, 200);
+      }
+    }
+    
+    // Event listeners - removed old slider references since we now use value controls
+    
+    document.getElementById('rootMode').onchange = (e) => {
+      const mode = e.target.value;
+      if (mode === 'hz') {
+        document.getElementById('rootFreq').style.display = 'inline';
+        document.getElementById('rootMidi').style.display = 'none';
+        const midiNote = parseInt(document.getElementById('rootMidi').value);
+        document.getElementById('rootFreq').value = midiToFreq(midiNote).toFixed(2);
+      } else {
+        document.getElementById('rootFreq').style.display = 'none';
+        document.getElementById('rootMidi').style.display = 'inline';
+        const freq = parseFloat(document.getElementById('rootFreq').value);
+        const midiNote = freqToMidi(freq);
+        document.getElementById('rootMidi').value = midiNote;
+      }
+      generateTones();
+    };
+    
+    document.getElementById('rootFreq').oninput = (e) => {
+      generateTones();
+    };
+    
+    document.getElementById('rootMidi').onchange = (e) => {
+      generateTones();
+    };
+    
+    document.getElementById('sequenceMethod').onchange = (e) => {
+      const method = e.target.value;
+      const rotationControl = document.getElementById('sequenceRotationControl');
+      if (method === 'euclidean') {
+        rotationControl.style.display = 'block';
+      } else {
+        rotationControl.style.display = 'none';
+      }
+      generateTones();
+    };
+    
+    // Update sequence pattern when order changes
+    document.getElementById('sequenceOrder').onchange = (e) => {
+      const order = e.target.value;
+      // Show/hide reshuffle button
+      const reshuffleControl = document.getElementById('sequenceShuffleControl');
+      if (order === 'shuffle') {
+        reshuffleControl.style.display = 'block';
+      } else {
+        reshuffleControl.style.display = 'none';
+      }
+      
+      if (sequenceInterval) {
+        const currentStep = sequencePattern.currentStep;
+        generateSequencePattern();
+        sequencePattern.currentStep = currentStep;
+        updateSequenceVisualization();
+      }
+    };
+    
+    document.getElementById('synthMode').onchange = (e) => {
+      const mode = e.target.value;
+      
+      // Show/hide appropriate controls
+      document.querySelectorAll('.mono-only').forEach(el => {
+        el.style.display = mode === 'mono' ? 'block' : 'none';
+      });
+      document.querySelectorAll('.poly-only').forEach(el => {
+        el.style.display = mode === 'poly' ? 'block' : 'none';
+      });
+      
+      // Hide pattern steps for mono (automatic)
+      document.getElementById('patternStepsControl').style.display = mode === 'mono' ? 'none' : 'block';
+      
+      // Stop any playing sequence
+      if (sequenceInterval) {
+        document.getElementById('playSequence').click();
+      }
+    };
+    
+    document.getElementById('playBase').onclick = () => togglePlay('base');
+    document.getElementById('playScale').onclick = () => togglePlay('scale');
+    document.getElementById('playChord').onclick = () => togglePlay('chord');
+    document.getElementById('playSequenceTones').onclick = () => togglePlay('sequence');
+    document.getElementById('playSequence').onclick = playSequence;
+    
+    // Reshuffle button
+    document.getElementById('reshuffleButton').onclick = () => {
+      // Force a new shuffle
+      pipeline.shuffleCache.mono = null;
+      pipeline.shuffleCache.poly = null;
+      
+      // Regenerate pattern if playing
+      if (sequenceInterval) {
+        const currentStep = sequencePattern.currentStep;
+        generateSequencePattern();
+        sequencePattern.currentStep = currentStep;
+        updateSequenceVisualization();
+      } else {
+        // Even if not playing, regenerate for preview
+        generateSequencePattern();
+      }
+    };
+    
+    // Value control system with drag support
+    function setupValueControls() {
+      // Plus/minus buttons
+      document.querySelectorAll('.value-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const target = btn.dataset.target;
+          const delta = parseInt(btn.dataset.delta);
+          const display = document.getElementById(target + 'Value');
+          const min = parseInt(display.dataset.min);
+          const max = parseInt(display.dataset.max);
+          let value = parseInt(display.textContent);
+          
+          value = Math.max(min, Math.min(max, value + delta));
+          display.textContent = value;
+          
+          // Update max values for dependent controls
+          if (target === 'edo') {
+            document.getElementById('scaleNotesValue').dataset.max = value;
+            const scaleNotes = parseInt(document.getElementById('scaleNotesValue').textContent);
+            if (scaleNotes > value) {
+              document.getElementById('scaleNotesValue').textContent = value;
+            }
+          } else if (target === 'scaleNotes') {
+            document.getElementById('scaleRotationValue').dataset.max = value - 1;
+            document.getElementById('chordNotesValue').dataset.max = value;
+            const rotation = parseInt(document.getElementById('scaleRotationValue').textContent);
+            if (rotation >= value) {
+              document.getElementById('scaleRotationValue').textContent = 0;
+            }
+            const chordNotes = parseInt(document.getElementById('chordNotesValue').textContent);
+            if (chordNotes > value) {
+              document.getElementById('chordNotesValue').textContent = value;
+            }
+          } else if (target === 'chordNotes') {
+            document.getElementById('chordRotationValue').dataset.max = value - 1;
+            const rotation = parseInt(document.getElementById('chordRotationValue').textContent);
+            if (rotation >= value) {
+              document.getElementById('chordRotationValue').textContent = 0;
+            }
+            // Update sequence notes max when chord notes change
+            updateSequenceNotesMax();
+          } else if (target === 'sequenceNotes') {
+            // Update rotation max to be notes - 1
+            document.getElementById('sequenceRotationValue').dataset.max = value - 1;
+            const rotation = parseInt(document.getElementById('sequenceRotationValue').textContent);
+            if (rotation >= value) {
+              document.getElementById('sequenceRotationValue').textContent = 0;
+            }
+          } else if (target === 'sequenceOctaves') {
+            // Update sequence notes max based on chord tones × octaves
+            updateSequenceNotesMax();
+          } else if (target === 'sequenceBase' || target === 'sequenceRotation') {
+            // These sequence controls don't affect other controls
+          }
+          
+          // Real-time playback updates for sequence parameters
+          if (sequenceInterval) {
+            // Tempo changes - update interval timing
+            if (target === 'cpm') {
+              updateSequencePlayback();
+            }
+            // Pattern structure changes - regenerate pattern
+            else if (
+              // Mono-specific pattern changes (excluding portamento - that's performance only)
+              (document.getElementById('synthMode').value === 'mono' && 
+               false) || // Mono portamento doesn't change pattern structure anymore
+              // Poly-specific pattern changes  
+              (document.getElementById('synthMode').value === 'poly' && 
+               (target === 'rhythmPulses' || target === 'rhythmRotation' || target === 'patternSteps'))
+            ) {
+              const currentStep = sequencePattern.currentStep;
+              generateSequencePattern();
+              sequencePattern.currentStep = currentStep;
+              updateSequenceVisualization();
+              // Also update timing if pattern steps changed
+              if (target === 'patternSteps') {
+                updateSequencePlayback();
+              }
+            }
+            // Portamento changes - just update portamento pattern without reshuffling
+            else if (
+              document.getElementById('synthMode').value === 'mono' && 
+              (target === 'portamentoSteps' || target === 'portamentoRotation')
+            ) {
+              updatePortamentoPattern();
+              updateSequenceVisualization();
+            }
+            // These parameters take effect on next occurrence (no action needed)
+            // - portamentoTime (mono): applied on next glide
+            // - attackTime/decayTime (poly): applied on next note
+          }
+          
+          // Only call generateTones for parameters that affect tone generation
+          if (!['portamentoSteps', 'portamentoRotation', 'portamentoTime', 'attackTime', 'decayTime', 'cpm'].includes(target)) {
+            generateTones();
+          }
+        });
+      });
+      
+      // Drag functionality
+      document.querySelectorAll('.value-display').forEach(display => {
+        let isDragging = false;
+        let startY = 0;
+        let startValue = 0;
+        
+        display.addEventListener('mousedown', (e) => {
+          isDragging = true;
+          startY = e.clientY;
+          startValue = parseInt(display.textContent);
+          display.classList.add('dragging');
+          document.body.style.cursor = 'ns-resize';
+          e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          
+          const delta = Math.floor((startY - e.clientY) / 5); // 5 pixels per increment
+          const min = parseInt(display.dataset.min);
+          const max = parseInt(display.dataset.max);
+          const multiplier = e.shiftKey ? 0.1 : 1; // Fine control with shift
+          
+          let value = startValue + Math.floor(delta * multiplier);
+          value = Math.max(min, Math.min(max, value));
+          
+          if (display.textContent !== value.toString()) {
+            display.textContent = value;
+            
+            // Handle dependent values
+            const id = display.id;
+            if (id === 'edoValue') {
+              document.getElementById('scaleNotesValue').dataset.max = value;
+            } else if (id === 'scaleNotesValue') {
+              document.getElementById('scaleRotationValue').dataset.max = value - 1;
+              document.getElementById('chordNotesValue').dataset.max = value;
+            } else if (id === 'chordNotesValue') {
+              document.getElementById('chordRotationValue').dataset.max = value - 1;
+            }
+            
+            // Real-time playback updates during drag
+            if (sequenceInterval) {
+              if (id === 'cpmValue') {
+                updateSequencePlayback();
+              }
+              else if (
+                // Poly pattern changes
+                (document.getElementById('synthMode').value === 'poly' && 
+                 (id === 'rhythmPulsesValue' || id === 'rhythmRotationValue' || id === 'patternStepsValue'))
+              ) {
+                const currentStep = sequencePattern.currentStep;
+                generateSequencePattern();
+                sequencePattern.currentStep = currentStep;
+                updateSequenceVisualization();
+                if (id === 'patternStepsValue') {
+                  updateSequencePlayback();
+                }
+              }
+              // Mono portamento changes - just update portamento pattern
+              else if (
+                document.getElementById('synthMode').value === 'mono' && 
+                (id === 'portamentoStepsValue' || id === 'portamentoRotationValue')
+              ) {
+                updatePortamentoPattern();
+                updateSequenceVisualization();
+              }
+            }
+            
+            // Only call generateTones for parameters that affect tone generation
+            const paramId = display.id.replace('Value', '');
+            if (!['portamentoSteps', 'portamentoRotation', 'portamentoTime', 'attackTime', 'decayTime', 'cpm'].includes(paramId)) {
+              generateTones();
+            }
+          }
+        });
+        
+        document.addEventListener('mouseup', () => {
+          if (isDragging) {
+            isDragging = false;
+            display.classList.remove('dragging');
+            document.body.style.cursor = '';
+          }
+        });
+        
+        // Double-click to reset
+        display.addEventListener('dblclick', () => {
+          display.textContent = display.dataset.default;
+          generateTones();
+        });
+      });
+    }
+    
+    // Initialize
+    populateMidiDropdown();
+    setupValueControls();
+    connectWebSocket();
+    
+    // Initialize mode display
+    document.getElementById('synthMode').dispatchEvent(new Event('change'));
+    
+    // Initialize pipeline with UI values on page load
+    function initializePipeline() {
+      // Set default values if elements don't exist yet
+      pipeline.updateParam('edo', parseInt(document.getElementById('edoValue')?.textContent || '12'));
+      pipeline.updateParam('scaleNotes', parseInt(document.getElementById('scaleNotesValue')?.textContent || '7'));
+      pipeline.updateParam('scaleRotation', parseInt(document.getElementById('scaleRotationValue')?.textContent || '0'));
+      pipeline.updateParam('chordNotes', parseInt(document.getElementById('chordNotesValue')?.textContent || '4'));
+      pipeline.updateParam('chordRotation', parseInt(document.getElementById('chordRotationValue')?.textContent || '0'));
+      pipeline.updateParam('rootFreq', 261.63);
+      pipeline.updateParam('sequenceNotes', parseInt(document.getElementById('sequenceNotesValue')?.textContent || '8'));
+      pipeline.updateParam('sequenceMethod', document.getElementById('sequenceMethod')?.value || 'euclidean');
+      pipeline.updateParam('sequenceBase', parseInt(document.getElementById('sequenceBaseValue')?.textContent || '0'));
+      pipeline.updateParam('sequenceOctaves', parseInt(document.getElementById('sequenceOctavesValue')?.textContent || '2'));
+      pipeline.updateParam('sequenceRotation', parseInt(document.getElementById('sequenceRotationValue')?.textContent || '0'));
+      
+      updateTonesDisplay();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(initializePipeline, 100);
+      });
+    } else {
+      setTimeout(initializePipeline, 100);
+    }
+  </script>
+</body>
+</html>
