@@ -1,0 +1,376 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: "Courier New", monospace;
+    background: #f0f0f0;
+    color: #000;
+    padding: 20px;
+    overflow-x: auto;
+}
+
+h1 {
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+
+.main-container {
+    display: flex;
+    gap: 15px;
+    min-width: 1200px;
+    margin-bottom: 20px;
+    align-items: flex-start;
+}
+
+.tone-column {
+    flex: 1;
+    background: #fff;
+    border: 2px solid #000;
+    padding: 15px;
+    min-height: 500px;
+    display: flex;
+    flex-direction: column;
+}
+
+.column-title {
+    font-weight: bold;
+    padding: 8px;
+    background: #000;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.tones-display {
+    flex: 1;
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    position: relative;
+}
+
+.tone-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 2px 0;
+    cursor: pointer;
+    transition: background 0.2s;
+    min-height: 24px;
+}
+
+.tone-item:hover {
+    background: #e0e0e0;
+}
+
+.tone-item.active {
+    font-weight: bold;
+}
+
+.tone-item.inactive {
+    color: #ccc;
+}
+
+.tone-freq {
+    margin-right: 10px;
+    font-size: 14px;
+    width: 70px;
+    text-align: right;
+}
+
+.tone-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #000;
+}
+
+.tone-item.inactive .tone-dot {
+    background: #ddd;
+}
+
+.tone-item.playing {
+    background: #ffeb3b;
+}
+
+.euclidean-control {
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    padding: 8px;
+    border-radius: 4px;
+    width: 100px;
+    flex-shrink: 0;
+}
+
+.euclidean-control h3 {
+    font-size: 12px;
+    margin-bottom: 8px;
+    text-align: center;
+    background: #000;
+    color: #fff;
+    padding: 4px;
+    margin: -8px -8px 8px -8px;
+}
+
+.control {
+    margin: 10px 0;
+}
+
+.control label {
+    font-size: 11px;
+    display: block;
+    margin-bottom: 4px;
+    text-align: center;
+}
+
+.value-control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+.value-btn {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #000;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.value-btn:hover {
+    background: #000;
+    color: #fff;
+}
+
+.value-display {
+    flex: 1;
+    text-align: center;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 4px;
+    background: #f0f0f0;
+    border: 1px solid #999;
+    cursor: ns-resize;
+    user-select: none;
+    position: relative;
+}
+
+.value-display:hover {
+    background: #e0e0e0;
+}
+
+.value-display.dragging {
+    background: #d0d0d0;
+    border-color: #000;
+}
+
+.control input[type="number"] {
+    width: 100%;
+    padding: 2px;
+    border: 1px solid #000;
+    font-family: inherit;
+    font-size: 11px;
+}
+
+.play-button {
+    width: 100%;
+    background: #fff;
+    border: 2px solid #000;
+    padding: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+}
+
+.play-button:hover {
+    background: #000;
+    color: #fff;
+}
+
+.play-button.playing {
+    background: #4caf50;
+    color: #fff;
+}
+
+.global-settings {
+    background: #fff;
+    border: 2px solid #000;
+    padding: 15px;
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.global-settings h2 {
+    font-size: 14px;
+    margin-bottom: 10px;
+    background: #000;
+    color: #fff;
+    padding: 5px;
+    text-align: center;
+    margin: -15px -15px 10px -15px;
+}
+
+select {
+    padding: 2px;
+    border: 1px solid #000;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+/* Connection status CSS removed - client-side only */
+
+.sequence-section {
+    background: #fff;
+    border: 2px solid #000;
+    margin-bottom: 20px;
+    padding: 15px;
+}
+
+.sequence-header {
+    background: #000;
+    color: #fff;
+    margin: -15px -15px 15px -15px;
+    padding: 10px;
+    text-align: center;
+}
+
+.sequence-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.sequence-visualization {
+    height: 300px;
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sequence-grid {
+    width: 100%;
+    height: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    table-layout: fixed;
+    flex: 1;
+}
+
+.sequence-grid td {
+    border: 1px solid #ddd;
+    text-align: center;
+    vertical-align: middle;
+    position: relative;
+    padding: 2px;
+    min-height: 24px;
+    height: auto;
+}
+
+.sequence-grid .note-cell {
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    background: #fff;
+    transition: background-color 0.2s;
+}
+
+.sequence-grid .freq-label {
+    width: 80px;
+    min-width: 80px;
+    text-align: right;
+    padding-right: 6px;
+    border-right: 2px solid #ccc;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    border-left: none;
+    font-weight: bold;
+    background: #f0f0f0;
+    font-size: 10px;
+}
+
+.sequence-grid .step-header {
+    font-weight: bold;
+    background: #f0f0f0;
+    border-top: none;
+    border-bottom: 2px solid #ccc;
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+    font-size: 10px;
+    padding: 4px 2px;
+}
+
+.sequence-grid .porta-label {
+    background: #e0e0e0;
+    font-style: italic;
+}
+
+.sequence-grid .active-note {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #000;
+    width: 100%;
+    height: 100%;
+}
+
+.sequence-grid .porta-active {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #666;
+    width: 100%;
+    height: 100%;
+}
+
+.sequence-grid .current-column {
+    background: #ffeb3b !important;
+}
+
+.sequence-grid .current-column.active-note {
+    background: #000 !important;
+    box-shadow: 0 0 0 3px #ffeb3b;
+}
+
+.sequence-controls {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.sequence-control-group {
+    background: #f9f9f9;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 4px;
+    min-width: 120px;
+}
+
+.sequence-control-group h3 {
+    font-size: 12px;
+    margin: -10px -10px 10px -10px;
+    padding: 5px;
+    background: #000;
+    color: #fff;
+    text-align: center;
+}

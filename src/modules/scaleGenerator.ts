@@ -1,4 +1,4 @@
-import { euclideanRhythm, gcd } from "./euclidean.ts";
+import { euclideanRhythm, gcd, patternToIntervals, intervalsToPattern } from "./euclidean.ts";
 
 export interface ScaleParams {
   edo: number;
@@ -25,54 +25,47 @@ export class ScaleGenerator {
     // Use Euclidean algorithm to distribute notes evenly in EDO
     const pattern = euclideanRhythm(noteCount, edo);
     
-    // Convert pattern to scale steps (original unrotated scale)
-    const originalSteps: number[] = [];
-    pattern.forEach((hasNote, index) => {
-      if (hasNote) {
-        originalSteps.push(index);
-      }
-    });
-    
-    // Calculate intervals in the original scale
-    const originalIntervals: number[] = [];
-    for (let i = 0; i < originalSteps.length; i++) {
-      const current = originalSteps[i];
-      const next = originalSteps[(i + 1) % originalSteps.length];
-      const interval = next > current ? next - current : edo - current + next;
-      originalIntervals.push(interval);
+    if (noteCount === 0) {
+      return this.createEmptyScale();
     }
     
-    // Rotate through scale degrees (not chromatic steps)
-    // Rotation of 1 means start from the 2nd note of the scale
-    const rotatedIntervals = [];
-    if (rotation > 0 && originalIntervals.length > 0) {
-      const rot = rotation % originalIntervals.length;
-      rotatedIntervals.push(...originalIntervals.slice(rot));
-      rotatedIntervals.push(...originalIntervals.slice(0, rot));
-    } else {
-      rotatedIntervals.push(...originalIntervals);
+    // Convert pattern to canonical interval representation
+    const canonicalIntervals = patternToIntervals(pattern);
+    
+    if (canonicalIntervals.length === 0) {
+      return this.createEmptyScale();
     }
     
-    // Build the new scale from rotated intervals, starting from 0
-    const steps: number[] = [0];
+    // Apply rotation to the interval array (handles rotation = 0 gracefully)
+    let rotatedIntervals = canonicalIntervals;
+    if (rotation > 0 && canonicalIntervals.length > 0) {
+      const rot = rotation % canonicalIntervals.length;
+      rotatedIntervals = [
+        ...canonicalIntervals.slice(rot),
+        ...canonicalIntervals.slice(0, rot)
+      ];
+    }
+    
+    // Build scale steps from rotated intervals
+    const steps = [0];
     let currentStep = 0;
     for (let i = 0; i < rotatedIntervals.length - 1; i++) {
       currentStep += rotatedIntervals[i];
       steps.push(currentStep);
     }
     
-    // Add the octave (final note) to complete the scale
     const stepsWithOctave = [...steps, edo];
     
+    // Calculate frequencies in one pass
     const frequencies = stepsWithOctave.map(step => 
       rootFreq * Math.pow(2, step / edo)
     );
     
-    // The intervals are already calculated (rotatedIntervals)
-    // Just need to slice off the last one since we're adding the octave
-    const intervalsWithOctave = rotatedIntervals.slice(0, -1);
-    // Add the last interval to reach the octave
-    intervalsWithOctave.push(edo - steps[steps.length - 1]);
+    // Final intervals including octave completion
+    const intervalsWithOctave = [
+      ...rotatedIntervals.slice(0, -1),
+      edo - steps[steps.length - 1]
+    ];
     
     return {
       name: this.getScaleName(),
@@ -80,9 +73,24 @@ export class ScaleGenerator {
       steps: stepsWithOctave,
       frequencies,
       intervals: intervalsWithOctave,
-      pattern
+      pattern // Keep original canonical pattern for reference
     };
   }
+
+  private createEmptyScale(): Scale {
+    const { edo, rootFreq } = this.params;
+    return {
+      name: "Empty Scale",
+      edo,
+      steps: [0, edo],
+      frequencies: [rootFreq, rootFreq * 2],
+      intervals: [edo],
+      pattern: new Array(edo).fill(false)
+    };
+  }
+
+  // Helper methods no longer needed with interval-based approach
+  // The new approach directly uses patternToIntervals and intervalsToPattern
   
   getScaleName(): string {
     const { edo, noteCount } = this.params;

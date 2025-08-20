@@ -1,0 +1,117 @@
+/**
+ * AudioWorklet Service
+ * 
+ * Main thread interface for the AudioWorklet scheduler.
+ * Handles loading, initialization, and communication with the worklet.
+ */
+
+import { audioContext } from './audio.js';
+
+let schedulerNode = null;
+let isInitialized = false;
+
+/**
+ * Initialize the AudioWorklet scheduler
+ * @returns {Promise<AudioWorkletNode|null>} The scheduler node or null if failed
+ */
+export async function initializeAudioWorklet() {
+  if (isInitialized || !audioContext) {
+    return schedulerNode;
+  }
+  
+  try {
+    console.log('🎵 Initializing AudioWorklet scheduler...');
+    
+    // Load the worklet module
+    await audioContext.audioWorklet.addModule('/src/frontend/scheduler.worklet.js');
+    
+    // Create the worklet node
+    schedulerNode = new AudioWorkletNode(audioContext, 'scheduler-processor');
+    
+    // Connect to destination to keep worklet alive (silent connection)
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0; // Silent
+    schedulerNode.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    isInitialized = true;
+    console.log('✅ AudioWorklet scheduler initialized successfully');
+    
+    return schedulerNode;
+  } catch (error) {
+    console.error('❌ AudioWorklet initialization failed:', error);
+    
+    // Fallback logging for debugging
+    if (error.name === 'InvalidStateError') {
+      console.error('Audio context might not be running. Try clicking to start audio context.');
+    } else if (error.message.includes('addModule')) {
+      console.error('Failed to load worklet module. Check file path and server serving.');
+    }
+    
+    return null;
+  }
+}
+
+/**
+ * Get the scheduler node (if initialized)
+ * @returns {AudioWorkletNode|null} The scheduler node or null
+ */
+export function getSchedulerNode() {
+  return schedulerNode;
+}
+
+/**
+ * Send a message to the scheduler worklet
+ * @param {string} type - Message type
+ * @param {Object} payload - Message payload
+ */
+export function sendToScheduler(type, payload = {}) {
+  if (schedulerNode && schedulerNode.port) {
+    schedulerNode.port.postMessage({ type, payload });
+  } else {
+    console.warn(`Cannot send message "${type}" - scheduler not initialized`);
+  }
+}
+
+/**
+ * Check if the AudioWorklet scheduler is ready
+ * @returns {boolean} True if initialized and ready
+ */
+export function isSchedulerReady() {
+  return isInitialized && schedulerNode !== null;
+}
+
+/**
+ * Update the CPM (cycles per minute) in the scheduler
+ * @param {number} cpm - New CPM value
+ */
+export function updateSchedulerCpm(cpm) {
+  sendToScheduler('setCpm', { cpm });
+}
+
+/**
+ * Update the pattern in the scheduler
+ * @param {number} patternLength - Number of steps in the pattern
+ * @param {boolean[]} rhythm - Rhythm pattern array
+ * @param {boolean[]} portamento - Portamento pattern array
+ */
+export function updateSchedulerPattern(patternLength, rhythm, portamento) {
+  sendToScheduler('setPattern', { 
+    patternLength,
+    rhythm,
+    portamento
+  });
+}
+
+/**
+ * Cleanup the scheduler (for hot reloading or cleanup)
+ */
+export function destroyScheduler() {
+  if (schedulerNode) {
+    sendToScheduler('stop');
+    schedulerNode.disconnect();
+    schedulerNode = null;
+  }
+  isInitialized = false;
+  console.log('🎵 AudioWorklet scheduler destroyed');
+}
