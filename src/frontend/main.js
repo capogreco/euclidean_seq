@@ -1,6 +1,7 @@
 // Import modules
 import { AppState } from './state.js';
 import { TonePipeline, euclideanRhythm } from './toneGenerator.js';
+import { generateToneData, orderTones, euclideanRhythm as pureEuclideanRhythm } from './toneEngine.js';
 import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerCpm, updateSchedulerPattern } from './audio-worklet-service.js';
@@ -83,6 +84,7 @@ function handleValueChange(display, value) {
     }
 
     // Only call generateTones for parameters that affect tone generation
+    // Rotations and base/octaves are handled by handleControlChange -> updateTonesOnly
     if (
         ![
             'portamentoSteps',
@@ -91,6 +93,11 @@ function handleValueChange(display, value) {
             'attackTime',
             'decayTime',
             'cpm',
+            'scaleRotation',
+            'chordRotation',
+            'sequenceRotation',
+            'sequenceBase',
+            'sequenceOctaves',
         ].includes(target)
     ) {
         generateTones();
@@ -140,43 +147,46 @@ function updateDependentControls(target, value) {
     }
 }
 
-// Unified parameter change handler - all changes are immediate!
+// Simplified parameter change handler using pure functions
 function handleControlChange(paramName, newValue) {
     // Update the parameter immediately
     appState.set(paramName, newValue);
     
     if (paramName === 'cpm') {
-        // ---- Tempo changes: Update AudioWorklet ----
+        // ---- Tempo changes: Update AudioWorklet only ----
         updateSchedulerCpm(newValue);
-        console.log(`🎵 CPM: ${newValue}`);
-        
-    } else if (['scaleRotation', 'chordRotation', 'sequenceRotation'].includes(paramName)) {
-        // ---- Tuning rotations: Update tones without reshuffling sequence ----
-        updateTonesOnly();
-        updateSequenceVisualization(appState);
-        console.log(`🎵 TUNING: ${paramName} = ${newValue}`);
-        
     } else if (['portamentoSteps', 'portamentoRotation'].includes(paramName)) {
-        // ---- Portamento: Update pattern without reshuffling sequence ----
+        // ---- Portamento: Update pattern only ----
         updatePortamentoPattern();
         updateSequenceVisualization(appState);
-        console.log(`🎵 PORTAMENTO: ${paramName} = ${newValue}`);
-        
     } else {
-        // ---- All other changes: Full regeneration ----
-        generateTones();
-        generateSequencePattern();
-        updateSequenceVisualization(appState);
-        
-        // If playing, update the AudioWorklet with the new pattern length
-        if (appState.playback.isPlaying && appState.playback.sequencePattern.steps) {
-            updateSchedulerPattern(
-                appState.playback.sequencePattern.steps.length,
-                appState.playback.sequencePattern.rhythm,
-                appState.playback.sequencePattern.portamento
-            );
-        }
-        console.log(`🎵 REGENERATED: ${paramName} = ${newValue}`);
+        // ---- All other changes: Regenerate using pure functions ----
+        regenerateEverything();
+    }
+}
+
+// Regenerate all tone data and patterns using pure functions
+function regenerateEverything() {
+    // Get fresh tone data using pure functions
+    const toneData = generateToneData(appState.params);
+    
+    // Update the old pipeline for compatibility (we'll remove this later)
+    currentData = toneData;
+    
+    // Update display
+    updateTonesDisplay(toneData);
+    
+    // Generate sequence pattern
+    generateSequencePattern();
+    updateSequenceVisualization(appState);
+    
+    // If playing, update the AudioWorklet with the new pattern
+    if (appState.playback.isPlaying && appState.playback.sequencePattern.steps) {
+        updateSchedulerPattern(
+            appState.playback.sequencePattern.steps.length,
+            appState.playback.sequencePattern.rhythm,
+            appState.playback.sequencePattern.portamento
+        );
     }
 }
 
@@ -329,18 +339,18 @@ function generateSequencePattern() {
     }
     // --- End of new code ---
 
+    // Get fresh sequence data using pure functions
+    const freshData = currentData || generateToneData(appState.params);
+    
     // Get active sequence tones (the selected subset from the expanded pool)
     const activeTones = [];
-    if (currentData.sequenceTones && currentData.sequenceIndices) {
-        // Collect all non-zero tones in order
-        for (let i = 0; i < currentData.sequenceTones.length; i++) {
-            if (
-                currentData.sequenceTones[i] > 0 &&
-                currentData.sequenceIndices.includes(i)
-            ) {
-                activeTones.push(currentData.sequenceTones[i]);
+    if (freshData.sequenceTones && freshData.sequenceIndices) {
+        // Collect tones in the order of sequenceIndices (preserves random selection order)
+        freshData.sequenceIndices.forEach(index => {
+            if (index < freshData.sequenceTones.length && freshData.sequenceTones[index] > 0) {
+                activeTones.push(freshData.sequenceTones[index]);
             }
-        }
+        });
     }
 
     if (activeTones.length === 0) {
@@ -354,8 +364,8 @@ function generateSequencePattern() {
         `Generating pattern with ${activeTones.length} tones, mode: ${mode}`,
     );
 
-    // Generate rhythm pattern using interval-based rotation
-    let rhythm = euclideanRhythm(rhythmPulses, patternSteps);
+    // Generate rhythm pattern using pure euclidean function
+    let rhythm = pureEuclideanRhythm(rhythmPulses, patternSteps);
     if (rhythmRotation > 0) {
         const canonicalIntervals = patternToIntervals(rhythm);
         if (canonicalIntervals.length > 0) {
@@ -378,7 +388,7 @@ function generateSequencePattern() {
         );
         
         // 1. Generate the canonical, unrotated pattern
-        const canonicalPattern = euclideanRhythm(
+        const canonicalPattern = pureEuclideanRhythm(
             actualPortamentoSteps,
             patternSteps,
         );
@@ -405,8 +415,9 @@ function generateSequencePattern() {
         // Mono: simple ordering of tones
         let orderedTones = [...activeTones];
 
-        // Use pipeline ordering method
-        orderedTones = pipeline.orderTones(activeTones, order);
+        // Use pure ordering function with deterministic seed
+        const seed = appState.get('randomSeed') + appState.get('synthMode').charCodeAt(0);
+        orderedTones = orderTones(activeTones, order, seed);
 
         // In mono, all steps have notes (no rests)
         for (let i = 0; i < patternSteps; i++) {
@@ -424,8 +435,9 @@ function generateSequencePattern() {
                 patternSteps;
         }
     } else {
-        // Poly mode: use pipeline ordering
-        const orderedTones = pipeline.orderTones(activeTones, order);
+        // Poly mode: use pure ordering function with deterministic seed
+        const seed = appState.get('randomSeed') + appState.get('synthMode').charCodeAt(0);
+        const orderedTones = orderTones(activeTones, order, seed);
 
         for (let i = 0; i < patternSteps; i++) {
             if (rhythm[i]) {
@@ -494,7 +506,7 @@ function updatePortamentoPattern() {
         );
         
         // 1. Generate the canonical, unrotated pattern
-        const canonicalPattern = euclideanRhythm(
+        const canonicalPattern = pureEuclideanRhythm(
             actualPortamentoSteps,
             patternSteps,
         );
@@ -527,109 +539,27 @@ function updateSequencePlayback() {
     }
 }
 
-// Update tones only without regenerating sequence pattern (avoids reshuffling)
-function updateTonesOnly() {
-    // Update pipeline with current state
-    pipeline.updateParam("edo", appState.get("edo"));
-    pipeline.updateParam("scaleNotes", appState.get("scaleNotes"));
-    pipeline.updateParam("scaleRotation", appState.get("scaleRotation"));
-    pipeline.updateParam("chordNotes", appState.get("chordNotes"));
-    pipeline.updateParam("chordRotation", appState.get("chordRotation"));
-    pipeline.updateParam("rootFreq", getRootFrequency());
-    pipeline.updateParam("sequenceNotes", appState.get("sequenceNotes"));
-    pipeline.updateParam("sequenceMethod", appState.get("sequenceMethod"));
-    pipeline.updateParam("sequenceBase", appState.get("sequenceBase"));
-    pipeline.updateParam("sequenceOctaves", appState.get("sequenceOctaves"));
-    pipeline.updateParam("sequenceRotation", appState.get("sequenceRotation"));
+// This function is no longer needed - we use regenerateEverything() instead
 
-    updateTonesDisplay();
-    
-    // Update sequence pattern frequencies without changing note order
-    updateSequenceFrequencies();
-}
+// These functions are no longer needed with the pure function approach
 
-// Update the frequencies in the existing sequence pattern without changing the order
-function updateSequenceFrequencies() {
-    if (!appState.playback.sequencePattern.steps || appState.playback.sequencePattern.steps.length === 0) {
-        return; // No pattern to update
-    }
-    
-    // Get the current sequence data from pipeline to get updated frequencies
-    const data = pipeline.getCurrentData();
-    
-    if (!data.sequenceTones || !data.sequenceIndices) {
-        return; // No sequence data available
-    }
-    
-    // Get the currently playing sequence
-    const currentSteps = appState.playback.sequencePattern.steps;
-    
-    // Get active sequence tones (the selected subset with updated tuning)
-    const activeTones = [];
-    for (let i = 0; i < data.sequenceTones.length; i++) {
-        if (data.sequenceTones[i] > 0 && data.sequenceIndices.includes(i)) {
-            activeTones.push(data.sequenceTones[i]);
-        }
-    }
-    
-    if (activeTones.length === 0) {
-        return; // No tones to work with
-    }
-    
-    // Update each step: if it was a note, keep it as a note from the new tone set
-    // The key insight: preserve the rhythmic pattern and note succession, just update pitches
-    const updatedSteps = [];
-    let noteCounter = 0;
-    
-    for (let i = 0; i < currentSteps.length; i++) {
-        const currentStep = currentSteps[i];
-        if (currentStep === null || currentStep === 0) {
-            // Keep rests as rests
-            updatedSteps.push(currentStep);
-        } else {
-            // Replace with new tone, maintaining the same position in the sequence
-            const toneIndex = noteCounter % activeTones.length;
-            updatedSteps.push(activeTones[toneIndex]);
-            noteCounter++;
-        }
-    }
-    
-    // Update the pattern with new frequencies, preserving rhythm and portamento
-    appState.playback.sequencePattern.steps = updatedSteps;
-    
-    console.log(`🎵 UPDATED FREQUENCIES: Preserved pattern structure, updated ${noteCounter} notes to new tuning`);
-}
-
-// Legacy function for compatibility
+// Legacy function for compatibility - now uses pure functions
 function generateTones() {
-    // Sync all parameters from DOM to state and pipeline
+    // Sync all parameters from DOM to state
     appState.syncFromDOM();
+    
+    // Update root frequency from UI
+    appState.set('rootFreq', getRootFrequency());
 
-    // Update pipeline with current state
-    pipeline.updateParam("edo", appState.get("edo"));
-    pipeline.updateParam("scaleNotes", appState.get("scaleNotes"));
-    pipeline.updateParam("scaleRotation", appState.get("scaleRotation"));
-    pipeline.updateParam("chordNotes", appState.get("chordNotes"));
-    pipeline.updateParam("chordRotation", appState.get("chordRotation"));
-    pipeline.updateParam("rootFreq", getRootFrequency());
-    pipeline.updateParam("sequenceNotes", appState.get("sequenceNotes"));
-    pipeline.updateParam("sequenceMethod", appState.get("sequenceMethod"));
-    pipeline.updateParam("sequenceBase", appState.get("sequenceBase"));
-    pipeline.updateParam("sequenceOctaves", appState.get("sequenceOctaves"));
-    pipeline.updateParam("sequenceRotation", appState.get("sequenceRotation"));
-
-    updateTonesDisplay();
-
-    // Always generate and visualize the sequence pattern
-    const currentStep = appState.playback.sequencePattern
-        ? appState.playback.sequencePattern.currentStep
-        : 0;
-    generateSequencePattern();
-    updateSequenceVisualization(appState);
+    // Use the new pure function approach
+    regenerateEverything();
 }
 
-function updateTonesDisplay() {
-    const data = pipeline.getCurrentData();
+function updateTonesDisplay(data = null) {
+    // Use provided data or generate fresh data
+    if (!data) {
+        data = generateToneData(appState.params);
+    }
 
     // Reset play indices if the number of tones changed
     if (data.scaleIndices && playIndices.scale >= data.scaleIndices.length) {
@@ -815,8 +745,9 @@ document.getElementById("playSequence").onclick = () =>
 
 // Reshuffle button
 document.getElementById("reshuffleButton").onclick = () => {
-    // Force a new shuffle using pipeline method
-    pipeline.reshuffle();
+    // Generate new random seed for fresh shuffle
+    const newSeed = Math.floor(Math.random() * 1000000);
+    appState.set('randomSeed', newSeed);
 
     // Always regenerate pattern and visualization
     generateSequencePattern();
@@ -825,11 +756,12 @@ document.getElementById("reshuffleButton").onclick = () => {
 
 // Randomize button for random sequence method
 document.getElementById("randomizeSequence").onclick = () => {
-    // Force regeneration of random sequence tones by clearing any cached selections
-    pipeline.clearShuffleCache();
+    // Generate new random seed for fresh randomization
+    const newSeed = Math.floor(Math.random() * 1000000);
+    appState.set('randomSeed', newSeed);
 
-    // Regenerate the sequence tones - this will automatically update pattern and visualization
-    generateTones();
+    // Regenerate everything with the new seed
+    regenerateEverything();
 };
 
 // Initialize application with state synchronization
@@ -846,7 +778,7 @@ async function initializeApp() {
         schedulerNode.port.onmessage = (event) => {
             const { type, payload } = event.data;
             if (type === 'stepChange') {
-                console.log(`🎵 WORKLET STEP: ${payload.step} at audio time ${payload.audioTimeElapsed.toFixed(3)}s (phasor: ${payload.phasor.toFixed(3)})`);
+                // console.log(`🎵 WORKLET STEP: ${payload.step} at audio time ${payload.audioTimeElapsed.toFixed(3)}s (phasor: ${payload.phasor.toFixed(3)})`);
                 
                 // Update state and trigger audio/visual updates
                 appState.playback.sequencePattern.currentStep = payload.step;
@@ -859,18 +791,8 @@ async function initializeApp() {
         console.warn('⚠️ AudioWorklet not available, falling back to animation frame timing');
     }
 
-    // Update pipeline with initial parameters
-    pipeline.updateParam("edo", appState.get("edo"));
-    pipeline.updateParam("scaleNotes", appState.get("scaleNotes"));
-    pipeline.updateParam("scaleRotation", appState.get("scaleRotation"));
-    pipeline.updateParam("chordNotes", appState.get("chordNotes"));
-    pipeline.updateParam("chordRotation", appState.get("chordRotation"));
-    pipeline.updateParam("rootFreq", appState.get("rootFreq"));
-    pipeline.updateParam("sequenceNotes", appState.get("sequenceNotes"));
-    pipeline.updateParam("sequenceMethod", appState.get("sequenceMethod"));
-    pipeline.updateParam("sequenceBase", appState.get("sequenceBase"));
-    pipeline.updateParam("sequenceOctaves", appState.get("sequenceOctaves"));
-    pipeline.updateParam("sequenceRotation", appState.get("sequenceRotation"));
+    // Generate initial tone data using pure functions
+    currentData = generateToneData(appState.params);
 
     // Initialize reshuffle button visibility
     const sequenceOrder = document.getElementById("sequenceOrder").value;

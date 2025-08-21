@@ -117,20 +117,16 @@ export class TonePipeline {
     updateParam(paramName, value) {
         this.params[paramName] = value;
 
-        // Clear shuffle cache when tones change
+        // Clear shuffle cache only when pattern structure changes
+        // Rotations, base, and octaves preserve pattern structure
         if (
             [
                 "edo",
                 "rootFreq",
                 "scaleNotes",
-                "scaleRotation",
                 "chordNotes",
-                "chordRotation",
                 "sequenceNotes",
                 "sequenceMethod",
-                "sequenceBase",
-                "sequenceOctaves",
-                "sequenceRotation",
             ].includes(paramName)
         ) {
             this.clearShuffleCache();
@@ -403,6 +399,7 @@ export class TonePipeline {
         } else if (sequenceMethod === "random") {
             const numToSelect = Math.min(sequenceNotes, expandedTones.length);
             const available = [...Array(expandedTones.length).keys()];
+            
             for (let i = 0; i < numToSelect; i++) {
                 const randomIndex = Math.floor(Math.random() * available.length);
                 selectedIndices.push(available[randomIndex]);

@@ -68,7 +68,7 @@ class SchedulerProcessor extends AudioWorkletProcessor {
 
     // Debug: Log every 100 blocks to see if process is running
     if (this.blockCount % 100 === 0) {
-      console.log(`🎵 WORKLET PROCESS: block ${this.blockCount}, phasor: ${this.phasor.toFixed(3)}, playing: ${this.isPlaying}`);
+      // console.log(`🎵 WORKLET PROCESS: block ${this.blockCount}, phasor: ${this.phasor.toFixed(3)}, playing: ${this.isPlaying}`);
     }
 
     // Calculate sample-accurate time elapsed for this audio block
@@ -90,7 +90,7 @@ class SchedulerProcessor extends AudioWorkletProcessor {
     if (currentStep !== this.lastStep) {
       const audioTimeElapsed = currentTime - (this.startTime || currentTime);
       
-      console.log(`🎵 WORKLET STEP CHANGE: ${this.lastStep} -> ${currentStep}, phasor: ${this.phasor.toFixed(3)}`);
+      // console.log(`🎵 WORKLET STEP CHANGE: ${this.lastStep} -> ${currentStep}, phasor: ${this.phasor.toFixed(3)}`);
       
       this.port.postMessage({
         type: 'stepChange',

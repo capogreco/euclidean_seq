@@ -146,7 +146,7 @@ export function triggerMonoStep(appState, step, freq) {
     const hasPortamento = appState.playback.sequencePattern.portamento[step];
     const now = window.audioContext.currentTime;
     
-    console.log(`🎶 MONO STEP ${step}: freq=${freq.toFixed(1)}Hz, portamento=${hasPortamento}, audio time: ${now.toFixed(3)}s`);
+    // console.log(`🎶 MONO STEP ${step}: freq=${freq.toFixed(1)}Hz, portamento=${hasPortamento}, audio time: ${now.toFixed(3)}s`);
 
     if (
         hasPortamento &&
@@ -164,7 +164,7 @@ export function triggerMonoStep(appState, step, freq) {
         const portamentoPercentage = appState.params.portamentoTime / 100; // Convert percentage to decimal
         const portamentoTime = stepTimeSeconds * portamentoPercentage;
         
-        console.log(`🎶 PORTAMENTO: ${appState.params.portamentoTime}% of ${stepTimeSeconds.toFixed(3)}s step = ${portamentoTime.toFixed(3)}s`);
+        // console.log(`🎶 PORTAMENTO: ${appState.params.portamentoTime}% of ${stepTimeSeconds.toFixed(3)}s step = ${portamentoTime.toFixed(3)}s`);
 
         // Use exponential ramp for musical intervals, linear ramp as fallback
         try {

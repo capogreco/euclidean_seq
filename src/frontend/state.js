@@ -25,6 +25,7 @@ export class AppState {
             decayTime: 100,
             synthMode: "mono",
             sequenceOrder: "forward",
+            randomSeed: 12345, // For deterministic shuffle/random
         };
 
         // Playback State
