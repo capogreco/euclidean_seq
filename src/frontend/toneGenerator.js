@@ -1,56 +1,9 @@
-// Interval-based rotation utilities (duplicated from main.js for modular use)
-const patternToIntervals = (pattern) => {
-    const trueIndices = pattern.map((val, idx) => val ? idx : -1)
-                             .filter(idx => idx !== -1);
-    
-    if (trueIndices.length < 2) return [];
-    
-    const intervals = [];
-    for (let i = 0; i < trueIndices.length - 1; i++) {
-        intervals.push(trueIndices[i + 1] - trueIndices[i]);
-    }
-    
-    const lastIndex = trueIndices[trueIndices.length - 1];
-    const firstIndex = trueIndices[0];
-    const wrapInterval = (pattern.length - lastIndex) + firstIndex;
-    intervals.push(wrapInterval);
-    
-    return intervals;
-};
+// Import unified euclidean utilities
+import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
 
-const intervalsToPattern = (intervals, steps) => {
-    const pattern = new Array(steps).fill(false);
-    
-    if (intervals.length === 0) return pattern;
-    
-    pattern[0] = true;
-    let currentPos = 0;
-    
-    for (let i = 0; i < intervals.length - 1; i++) {
-        currentPos = (currentPos + intervals[i]) % steps;
-        pattern[currentPos] = true;
-    }
-    
-    return pattern;
-};
+// Pattern utilities are now imported from unified euclidean.js
 
-// Optimized Euclidean algorithm implementation using Björklund's algorithm
-export function euclideanRhythm(pulses, steps) {
-    // Handle edge cases efficiently
-    if (pulses >= steps) return new Array(steps).fill(true);
-    if (pulses === 0) return new Array(steps).fill(false);
-    
-    // Use direct mathematical approach for better performance
-    const pattern = new Array(steps).fill(false);
-    const bucket = steps - pulses;
-    
-    for (let i = 0; i < pulses; i++) {
-        const position = Math.floor((i * steps) / pulses);
-        pattern[position] = true;
-    }
-    
-    return pattern;
-}
+// Euclidean algorithm is now unified in euclidean.js
 
 // Simplified Pipeline - Pure Functions
 export class TonePipeline {
@@ -172,11 +125,10 @@ export class TonePipeline {
                 }
                 return [...this.shuffleCache[cacheKey]];
 
-            case "random":
             default:
                 this.shuffleCache.mono = null;
                 this.shuffleCache.poly = null;
-                return [...tones]; // Keep original order for random
+                return [...tones]; // Keep original order for unknown methods
         }
     }
 

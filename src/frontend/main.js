@@ -1,47 +1,13 @@
 // Import modules
 import { AppState } from './state.js';
-import { TonePipeline, euclideanRhythm } from './toneGenerator.js';
-import { generateToneData, orderTones, euclideanRhythm as pureEuclideanRhythm } from './toneEngine.js';
+import { TonePipeline } from './toneGenerator.js';
+import { generateToneData, orderTones } from './toneEngine.js';
+import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
 import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerCpm, updateSchedulerPattern } from './audio-worklet-service.js';
 
-// Import interval-based rotation utilities
-// Note: In JavaScript, we need to work around the .ts import limitation
-const patternToIntervals = (pattern) => {
-    const trueIndices = pattern.map((val, idx) => val ? idx : -1)
-                             .filter(idx => idx !== -1);
-    
-    if (trueIndices.length < 2) return [];
-    
-    const intervals = [];
-    for (let i = 0; i < trueIndices.length - 1; i++) {
-        intervals.push(trueIndices[i + 1] - trueIndices[i]);
-    }
-    
-    const lastIndex = trueIndices[trueIndices.length - 1];
-    const firstIndex = trueIndices[0];
-    const wrapInterval = (pattern.length - lastIndex) + firstIndex;
-    intervals.push(wrapInterval);
-    
-    return intervals;
-};
-
-const intervalsToPattern = (intervals, steps) => {
-    const pattern = new Array(steps).fill(false);
-    
-    if (intervals.length === 0) return pattern;
-    
-    pattern[0] = true;
-    let currentPos = 0;
-    
-    for (let i = 0; i < intervals.length - 1; i++) {
-        currentPos = (currentPos + intervals[i]) % steps;
-        pattern[currentPos] = true;
-    }
-    
-    return pattern;
-};
+// Pattern utility functions are now imported from euclidean.js
 
 // Global instances
 const appState = new AppState();
@@ -364,8 +330,8 @@ function generateSequencePattern() {
         `Generating pattern with ${activeTones.length} tones, mode: ${mode}`,
     );
 
-    // Generate rhythm pattern using pure euclidean function
-    let rhythm = pureEuclideanRhythm(rhythmPulses, patternSteps);
+    // Generate rhythm pattern using euclidean function
+    let rhythm = euclideanRhythm(rhythmPulses, patternSteps);
     if (rhythmRotation > 0) {
         const canonicalIntervals = patternToIntervals(rhythm);
         if (canonicalIntervals.length > 0) {
@@ -388,7 +354,7 @@ function generateSequencePattern() {
         );
         
         // 1. Generate the canonical, unrotated pattern
-        const canonicalPattern = pureEuclideanRhythm(
+        const canonicalPattern = euclideanRhythm(
             actualPortamentoSteps,
             patternSteps,
         );
@@ -441,18 +407,10 @@ function generateSequencePattern() {
 
         for (let i = 0; i < patternSteps; i++) {
             if (rhythm[i]) {
-                // Use ordered tones for all modes (except random which needs special handling)
-                let noteIndex;
-                if (order === "random") {
-                    noteIndex = Math.floor(
-                        Math.random() * orderedTones.length,
-                    );
-                    steps.push(orderedTones[noteIndex]);
-                } else {
-                    noteIndex = noteCounter % orderedTones.length;
-                    steps.push(orderedTones[noteIndex]);
-                    noteCounter++;
-                }
+                // Use ordered tones cycling through the pattern
+                const noteIndex = noteCounter % orderedTones.length;
+                steps.push(orderedTones[noteIndex]);
+                noteCounter++;
             } else {
                 steps.push(null); // Rest
             }
@@ -506,7 +464,7 @@ function updatePortamentoPattern() {
         );
         
         // 1. Generate the canonical, unrotated pattern
-        const canonicalPattern = pureEuclideanRhythm(
+        const canonicalPattern = euclideanRhythm(
             actualPortamentoSteps,
             patternSteps,
         );

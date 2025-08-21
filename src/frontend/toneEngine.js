@@ -1,18 +1,7 @@
 // Pure Functional Tone Engine
 // All functions are pure - same inputs always produce same outputs
 
-// Euclidean rhythm algorithm
-export function euclideanRhythm(pulses, steps) {
-    if (pulses >= steps) return new Array(steps).fill(true);
-    if (pulses === 0) return new Array(steps).fill(false);
-    
-    const pattern = new Array(steps).fill(false);
-    for (let i = 0; i < pulses; i++) {
-        const position = Math.floor((i * steps) / pulses);
-        pattern[position] = true;
-    }
-    return pattern;
-}
+import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
 
 // Deterministic shuffle using seed
 export function shuffleArray(array, seed) {
@@ -34,42 +23,7 @@ export function shuffleArray(array, seed) {
     return result;
 }
 
-// Convert pattern to intervals
-function patternToIntervals(pattern) {
-    const trueIndices = pattern.map((val, idx) => val ? idx : -1)
-                             .filter(idx => idx !== -1);
-    
-    if (trueIndices.length < 2) return [];
-    
-    const intervals = [];
-    for (let i = 0; i < trueIndices.length - 1; i++) {
-        intervals.push(trueIndices[i + 1] - trueIndices[i]);
-    }
-    
-    const lastIndex = trueIndices[trueIndices.length - 1];
-    const firstIndex = trueIndices[0];
-    const wrapInterval = (pattern.length - lastIndex) + firstIndex;
-    intervals.push(wrapInterval);
-    
-    return intervals;
-}
-
-// Convert intervals to pattern
-function intervalsToPattern(intervals, steps) {
-    const pattern = new Array(steps).fill(false);
-    
-    if (intervals.length === 0) return pattern;
-    
-    pattern[0] = true;
-    let currentPos = 0;
-    
-    for (let i = 0; i < intervals.length - 1; i++) {
-        currentPos = (currentPos + intervals[i]) % steps;
-        pattern[currentPos] = true;
-    }
-    
-    return pattern;
-}
+// Pattern utility functions are now imported from euclidean.js
 
 // Generate base tones (all EDO frequencies)
 export function generateBaseTones(edo, rootFreq) {
@@ -314,9 +268,8 @@ export function orderTones(tones, method, seed = 12345) {
         case "shuffle":
             return shuffleArray(tones, seed);
         
-        case "random":
         default:
-            return [...tones]; // Keep original order for random
+            return [...tones]; // Keep original order for unknown methods
     }
 }
 
