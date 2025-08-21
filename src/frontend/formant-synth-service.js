@@ -25,11 +25,13 @@ export async function initializeFormantSynth() {
     // Load the worklet module
     await audioContext.audioWorklet.addModule('/src/frontend/formant-synth.worklet.js');
     
-    // Create the worklet node
+    // Create the worklet node but DON'T connect it
+    // The new synthesizer-manager.js will handle connections
     formantSynthNode = new AudioWorkletNode(audioContext, 'formant-synth-processor');
     
-    // Connect to destination
-    formantSynthNode.connect(audioContext.destination);
+    // NOTE: We no longer auto-connect to destination here
+    // Individual synthesizers are now managed by synthesizer-manager.js
+    console.log('📝 FormantSynth worklet node created (not connected)');
     
     isInitialized = true;
     console.log('✅ FormantSynth AudioWorklet initialized successfully');
@@ -163,24 +165,30 @@ export function createFormantOscillator(frequency = 220, vowelX = 0.5, vowelY = 
     return null;
   }
   
-  // Set initial parameter values
-  formantSynthNode.parameters.get('frequency').value = frequency;
-  formantSynthNode.parameters.get('vowelX').value = vowelX;
-  formantSynthNode.parameters.get('vowelY').value = vowelY;
-  formantSynthNode.parameters.get('active').value = 0; // Start inactive
+  // Set initial parameter values using setValueAtTime for proper scheduling
+  const now = audioContext.currentTime;
+  formantSynthNode.parameters.get('frequency').setValueAtTime(frequency, now);
+  formantSynthNode.parameters.get('vowelX').setValueAtTime(vowelX, now);
+  formantSynthNode.parameters.get('vowelY').setValueAtTime(vowelY, now);
+  formantSynthNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
   
   // Add helper methods for compatibility
   formantSynthNode.setVowel = function(x, y) {
-    this.parameters.get('vowelX').value = x;
-    this.parameters.get('vowelY').value = y;
+    const now = audioContext.currentTime;
+    this.parameters.get('vowelX').setValueAtTime(x, now);
+    this.parameters.get('vowelY').setValueAtTime(y, now);
   };
   
   formantSynthNode.start = function(time = 0) {
-    this.parameters.get('active').value = 1;
+    const now = audioContext.currentTime;
+    console.log('🎤 Activating formant synth');
+    this.parameters.get('active').setValueAtTime(1, now);
   };
   
   formantSynthNode.stop = function(time = 0) {
-    this.parameters.get('active').value = 0;
+    const now = audioContext.currentTime;
+    console.log('🎤 Deactivating formant synth');
+    this.parameters.get('active').setValueAtTime(0, now);
   };
   
   return formantSynthNode;

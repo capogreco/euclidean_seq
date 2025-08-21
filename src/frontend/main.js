@@ -6,7 +6,8 @@ import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './eucli
 import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep, updateSynthVowel } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerBpm, updateSchedulerSubdivision, updateSchedulerPatterns } from './audio-worklet-service.js';
-import { initializeFormantSynth, setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
+import { setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
+import { initializeSynthesizers, getCurrentSynthesizer } from './synthesizer-manager.js';
 
 // Pattern utility functions are now imported from euclidean.js
 
@@ -52,6 +53,20 @@ function triggerSequenceStep(step) {
     console.warn('⚠️ triggerSequenceStep is deprecated - using separate note/phoneme step handling');
 }
 
+// Update morph label based on current value
+function updateMorphLabel(morphValue) {
+    const label = document.getElementById('morphLabel');
+    if (!label) return;
+    
+    if (Math.abs(morphValue) < 0.1) {
+        label.textContent = 'Ring Modulation';
+    } else if (morphValue > 0) {
+        label.textContent = `AM (Fund→Harm) ${(morphValue * 100).toFixed(0)}%`;
+    } else {
+        label.textContent = `AM (Harm→Fund) ${(Math.abs(morphValue) * 100).toFixed(0)}%`;
+    }
+}
+
 // Controller functions (moved from ui.js)
 function handleValueChange(display, value) {
     const target = display.id.replace('Value', '');
@@ -63,7 +78,7 @@ function handleValueChange(display, value) {
     handleControlChange(target, value);
 
     // Sync real-time parameters that don't need full tone regeneration
-    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision'].includes(target)) {
+    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'morph', 'harmonicRatio', 'modDepth', 'symmetry'].includes(target)) {
         appState.set(target, value);
         
         // Update formant synthesizer for vowel changes
@@ -74,6 +89,22 @@ function handleValueChange(display, value) {
             
             // Reset vowel preset to custom when manually adjusting
             document.getElementById("vowelPreset").value = "custom";
+        }
+        
+        // Update Morphing Zing synthesizer parameters
+        if (['morph', 'harmonicRatio', 'modDepth', 'symmetry'].includes(target)) {
+            // Update current synthesizer parameters if it's a Zing synth
+            const currentSynth = getCurrentSynthesizer();
+            if (currentSynth && currentSynth.type === 'zing') {
+                const params = {};
+                params[target] = value;
+                currentSynth.setParams(params);
+            }
+            
+            // Update morph label
+            if (target === 'morph') {
+                updateMorphLabel(value);
+            }
         }
         
         // Regenerate phoneme pattern when steps change
@@ -102,6 +133,10 @@ function handleValueChange(display, value) {
             'decayTime',
             'bpm',
             'subdivision',
+            'morph',
+            'harmonicRatio',
+            'modDepth',
+            'symmetry',
             'scaleRotation',
             'chordRotation',
             'sequenceRotation',
@@ -347,7 +382,7 @@ function generatePhonemePattern() {
     appState.playback.phonemePattern.positions = selectedPositions;
     appState.playback.phonemePattern.currentStep = 0;
     
-    console.log(`🗣️ Generated phoneme pattern: [${selectedVowels.join(', ')}] (${phonemeSteps} steps - polyrhythmic with note sequence)`);
+    // console.log(`🗣️ Generated phoneme pattern: [${selectedVowels.join(', ')}] (${phonemeSteps} steps - polyrhythmic with note sequence)`);
 }
 
 // Sequence generation functions
@@ -419,9 +454,9 @@ function generateSequencePattern() {
         return;
     }
 
-    console.log(
-        `Generating pattern with ${activeTones.length} tones, mode: ${mode}`,
-    );
+    // console.log(
+    //     `Generating pattern with ${activeTones.length} tones, mode: ${mode}`,
+    // );
 
     // Generate rhythm pattern using euclidean function
     let rhythm = euclideanRhythm(rhythmPulses, patternSteps);
@@ -523,7 +558,7 @@ function generateSequencePattern() {
     // Generate phoneme pattern (independent length)
     generatePhonemePattern();
     
-    console.log(`🎵 PATTERN GENERATED: mode=${mode}, steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}], portamento=[${portamento.join(', ')}]`);
+    // console.log(`🎵 PATTERN GENERATED: mode=${mode}, steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}], portamento=[${portamento.join(', ')}]`);
 }
 
 // Update only the portamento pattern without changing the note order
@@ -589,7 +624,7 @@ function updateSequencePlayback() {
     // The AudioWorklet processor handles timing updates sample-accurately
     // No need to restart playback - timing updates smoothly in real-time
     if (appState.playback.isPlaying) {
-        console.log("Sequence playback updated for new timing");
+        // console.log("Sequence playback updated for new timing");
     }
 }
 
@@ -668,7 +703,7 @@ function updateParameter(paramName, value) {
     // Handle parameter updates that affect patterns/visualization
     if (
         [
-            "cpm",
+            "bpm",
             "rhythmPulses",
             "rhythmRotation",
             "patternSteps",
@@ -817,6 +852,28 @@ document.getElementById("vowelPreset").onchange = (e) => {
     }
 };
 
+// Synthesis type control handler
+document.getElementById("synthType").onchange = (e) => {
+    const synthType = e.target.value;
+    appState.set('synthType', synthType);
+    
+    // Show/hide appropriate synthesis controls
+    const zingControls = document.querySelectorAll(".zing-control");
+    const formantControls = document.querySelector(".formant-controls");
+    
+    if (synthType === "zing") {
+        zingControls.forEach(el => el.style.display = "block");
+        formantControls.style.display = "none";
+    } else if (synthType === "formant") {
+        zingControls.forEach(el => el.style.display = "none");
+        formantControls.style.display = "block";
+    } else {
+        // Sine - hide both advanced synthesis controls
+        zingControls.forEach(el => el.style.display = "none");
+        formantControls.style.display = "none";
+    }
+};
+
 // Subdivision is now handled by the value control system via handleValueChange
 
 // Button event listeners
@@ -869,9 +926,9 @@ async function initializeApp() {
     // Sync state from DOM
     appState.syncFromDOM();
 
-    // Initialize AudioWorklet scheduler and formant synthesizer
+    // Initialize AudioWorklet scheduler and the new unified synthesizer system
     await initializeAudioWorklet();
-    await initializeFormantSynth();
+    await initializeSynthesizers();
     
     // Set up worklet message handling
     const schedulerNode = getSchedulerNode();
@@ -896,12 +953,12 @@ async function initializeApp() {
                 if (freq) {
                     const mode = appState.params.synthMode;
                     
-                    console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz`);
+                    // console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz`);
                     
                     if (mode === 'mono') {
                         triggerMonoStep(appState, payload.noteStep, freq);
                     } else {
-                        triggerPolyStep(appState, payload.noteStep, freq);
+                        triggerPolyStep(appState, payload.noteStep, freq).catch(console.warn);
                     }
                 }
             }
@@ -912,10 +969,10 @@ async function initializeApp() {
                 if (vowelPosition) {
                     updateSynthVowel(appState, vowelPosition);
                 }
-                console.log(`🗣️ PHONEME STEP ${payload.phonemeStep}: vowel=${appState.playback.phonemePattern.vowels[payload.phonemeStep] || 'none'} -> (${vowelPosition?.x.toFixed(2)}, ${vowelPosition?.y.toFixed(2)})`);
+                // console.log(`🗣️ PHONEME STEP ${payload.phonemeStep}: vowel=${appState.playback.phonemePattern.vowels[payload.phonemeStep] || 'none'} -> (${vowelPosition?.x.toFixed(2)}, ${vowelPosition?.y.toFixed(2)})`);
             }
         };
-        console.log('🎵 AudioWorklet message handler set up');
+        // console.log('🎵 AudioWorklet message handler set up');
     } else {
         console.warn('⚠️ AudioWorklet not available, falling back to animation frame timing');
     }
@@ -959,6 +1016,7 @@ setupValueControls(handleValueChange);
 
 // Initialize mode display
 document.getElementById("synthMode").dispatchEvent(new Event("change"));
+document.getElementById("synthType").dispatchEvent(new Event("change"));
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {

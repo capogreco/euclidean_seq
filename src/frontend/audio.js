@@ -14,6 +14,34 @@ export const audioContext = new (window.AudioContext || window.webkitAudioContex
 // Make audioContext globally available
 window.audioContext = audioContext;
 
+// NOTE: Morphing Zing initialization is now handled by synthesizer-manager.js
+// This eliminates the complex race condition handling and lazy initialization
+
+// NOTE: createMorphingZingOscillator is replaced by synthesizer-manager.js
+
+// NOTE: Individual note playing and parameter updates are now handled by synthesizer-manager.js
+
+// Simple tone playback (always sine wave, for tone column auditioning)
+function playSimpleTone(frequency, duration = 200) {
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+
+    osc.frequency.value = frequency;
+    osc.type = "sine";
+
+    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(
+        0.01,
+        audioContext.currentTime + duration / 1000,
+    );
+
+    osc.start(audioContext.currentTime);
+    osc.stop(audioContext.currentTime + duration / 1000);
+}
+
 // Audio utility functions
 export function midiToFreq(midiNote) {
     return 440 * Math.pow(2, (midiNote - 69) / 12);
@@ -33,15 +61,25 @@ export function getRootFrequency() {
     }
 }
 
-export function playNote(
+export async function playNote(
     frequency,
     duration = 200,
     portamentoTime = 0,
     previousFreq = null,
     appState = null
 ) {
-    // Try to use formant synthesis if available
-    if (isFormantSynthReady() && appState) {
+    // Check synthesis mode preference
+    const synthMode = appState?.params?.synthType || 'zing';
+    
+    // Use the selected synthesis mode
+    if (synthMode === 'zing' && appState) {
+        const morph = appState.params.morph || 0;
+        const harmonicRatio = appState.params.harmonicRatio || 2;
+        
+        if (await playMorphingZingNote(frequency, duration, morph, harmonicRatio)) {
+            return; // Successfully used Morphing Zing synthesis
+        }
+    } else if (synthMode === 'formant' && isFormantSynthReady() && appState) {
         const vowelX = appState.params.vowelX || 0.5;
         const vowelY = appState.params.vowelY || 0.5;
         
@@ -146,7 +184,8 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
 
             const freq = currentTones[currentIndex];
             if (freq > 0) {
-                playNote(freq, 180, 0, null, appState);
+                // Use simple sine wave for tone column playback (not the selected synthesis mode)
+                playSimpleTone(freq, 180);
             }
 
             playIndices[type] =
@@ -183,10 +222,24 @@ export function triggerMonoStep(appState, step, freq) {
     const hasPortamento = appState.playback.sequencePattern.portamento[step];
     const now = window.audioContext.currentTime;
 
-    // Determine the correct AudioParam for frequency based on the oscillator type.
-    const frequencyParam = appState.playback.monoOsc.parameters 
-        ? appState.playback.monoOsc.parameters.get('frequency')  // For AudioWorkletNode
-        : appState.playback.monoOsc.frequency;                   // For standard OscillatorNode
+    // Get the frequency parameter from the new synthesizer manager interface
+    let frequencyParam = null;
+    
+    if (appState.playback.monoOsc.node?.parameters) {
+        // New synthesizer manager interface - access the underlying AudioWorkletNode
+        frequencyParam = appState.playback.monoOsc.node.parameters.get('frequency');
+    } else if (appState.playback.monoOsc.parameters) {
+        // Legacy AudioWorkletNode interface
+        frequencyParam = appState.playback.monoOsc.parameters.get('frequency');
+    } else if (appState.playback.monoOsc.frequency) {
+        // Standard OscillatorNode interface
+        frequencyParam = appState.playback.monoOsc.frequency;
+    }
+    
+    if (!frequencyParam) {
+        console.warn('Unable to access frequency parameter for mono oscillator');
+        return;
+    }
 
     if (hasPortamento && previousFreq && previousFreq !== freq) {
         // --- CORRECT PORTAMENTO IMPLEMENTATION ---
@@ -224,17 +277,24 @@ export function triggerMonoStep(appState, step, freq) {
     appState.playback.currentMonoFreq = freq;
 }
 
-export function triggerPolyStep(appState, step, freq) {
+export async function triggerPolyStep(appState, step, freq) {
     const attackTime = appState.params.attackTime;
     const decayTime = appState.params.decayTime;
+    const duration = attackTime + decayTime;
+    const synthType = appState.params.synthType || 'zing';
     
-    // Try to use formant synthesis for poly steps
-    if (isFormantSynthReady()) {
+    // Use the selected synthesis mode for poly steps
+    if (synthType === 'zing') {
+        const morph = appState.params.morph || 0;
+        const harmonicRatio = appState.params.harmonicRatio || 2;
+        
+        if (await playMorphingZingNote(freq, duration, morph, harmonicRatio)) {
+            return; // Successfully used Morphing Zing synthesis
+        }
+    } else if (synthType === 'formant' && isFormantSynthReady()) {
         // Use fallback vowel values for poly steps (current app state)
         const vowelX = appState.params.vowelX || 0.5;
         const vowelY = appState.params.vowelY || 0.5;
-        
-        const duration = attackTime + decayTime;
         
         if (playFormantNote(freq, duration, vowelX, vowelY)) {
             return; // Successfully used formant synthesis
@@ -268,115 +328,96 @@ export function triggerPolyStep(appState, step, freq) {
 }
 
 // Main sequence playback function using AudioWorklet scheduler
+import { switchToSynthesizer, stopCurrentSynthesizer } from './synthesizer-manager.js';
+
+// Simplified sequence playback using the new synthesizer manager
 export async function playSequence(appState, generateSequencePattern, updateSequenceVisualization) {
     const button = document.getElementById("playSequence");
-    const mode = document.getElementById("synthMode").value;
-
-    // Check if we're currently playing
+    
+    // --- STOP LOGIC ---
     if (appState.playback.isPlaying) {
-        // Stop the AudioWorklet scheduler
         sendToScheduler('stop');
         appState.playback.isPlaying = false;
-
-        // Clean up UI
         button.textContent = "▶ Play";
         button.classList.remove("playing");
-        updateSequenceVisualization();
 
-        // Stop mono oscillator if running
-        if (mode === "mono" && appState.playback.monoOsc) {
-            appState.playback.monoOsc.stop();
-            appState.playback.monoOsc = null;
-            appState.playback.monoGain = null;
-            appState.playback.currentMonoFreq = null;
+        // Clean shutdown with new system
+        stopCurrentSynthesizer();
+        appState.playback.monoOsc = null;
+        appState.playback.currentMonoFreq = null;
+        return;
+    }
+
+    // --- START LOGIC ---
+    if (appState.playback.isInitializing) {
+        console.warn("Already initializing, please wait.");
+        return;
+    }
+
+    appState.playback.isInitializing = true;
+    button.textContent = "Loading...";
+    button.disabled = true;
+
+    try {
+        generateSequencePattern();
+        if (!appState.playback.sequencePattern.steps || appState.playback.sequencePattern.steps.length === 0) {
+            throw new Error("No sequence pattern generated.");
         }
-        return;
-    }
 
-    // Generate sequence pattern
-    generateSequencePattern();
-
-    if (
-        !appState.playback.sequencePattern.steps ||
-        appState.playback.sequencePattern.steps.length === 0
-    ) {
-        console.log("No sequence pattern generated");
-        return;
-    }
-
-    button.textContent = "■ Stop";
-    button.classList.add("playing");
-
-    if (mode === "mono") {
-        // Try to use formant synthesis for mono mode
-        if (isFormantSynthReady()) {
+        // --- SIMPLE SYNTHESIZER SWITCHING ---
+        const mode = document.getElementById("synthMode").value;
+        if (mode === "mono") {
             const step0Freq = appState.playback.sequencePattern.steps[0] || 220;
-            const vowelX = appState.params.vowelX || 0.5;
-            const vowelY = appState.params.vowelY || 0.5;
+            const synthType = appState.params.synthType || 'sine';
+
+            // Get synth-specific parameters
+            const synthParams = {};
+            if (synthType === 'zing') {
+                synthParams.morph = appState.params.morph || 0;
+                synthParams.harmonicRatio = appState.params.harmonicRatio || 2;
+                synthParams.modDepth = appState.params.modDepth || 0.5;
+                synthParams.symmetry = appState.params.symmetry || 0.5;
+            } else if (synthType === 'formant') {
+                synthParams.vowelX = appState.params.vowelX || 0.5;
+                synthParams.vowelY = appState.params.vowelY || 0.5;
+            }
+
+            // This single call replaces all the complex oscillator creation logic
+            const monoOscillator = switchToSynthesizer(synthType, step0Freq, synthParams);
             
-            // Create formant oscillator interface
-            const formantOsc = createFormantOscillator(step0Freq, vowelX, vowelY);
-            if (formantOsc) {
-                formantOsc.start();
-                appState.playback.monoOsc = formantOsc;
+            if (monoOscillator) {
+                monoOscillator.start();
+                appState.playback.monoOsc = monoOscillator;
                 appState.playback.currentMonoFreq = step0Freq;
-                
-                console.log(`🎤 FORMANT OSC CREATED: Starting at audio time ${audioContext.currentTime.toFixed(3)}s with step 0 freq ${step0Freq.toFixed(1)}Hz`);
             } else {
-                // Fallback to sine if formant creation failed
-                createSineOscillator();
+                throw new Error(`Failed to create ${synthType} synthesizer`);
             }
-        } else {
-            // Fallback to sine oscillator
-            createSineOscillator();
         }
+
+        // --- START THE SCHEDULER ---
+        if (audioContext.state === 'suspended') await audioContext.resume();
         
-        function createSineOscillator() {
-            const monoOsc = audioContext.createOscillator();
-            const monoGain = audioContext.createGain();
-
-            monoOsc.connect(monoGain);
-            monoGain.connect(audioContext.destination);
-
-            monoOsc.type = "sine";
-            monoGain.gain.value = 0.3;
-
-            // Set initial frequency to step 0 frequency immediately
-            const step0Freq = appState.playback.sequencePattern.steps[0];
-            if (step0Freq) {
-                monoOsc.frequency.value = step0Freq;
-                appState.playback.currentMonoFreq = step0Freq;
-            }
-
-            console.log(`🎤 SINE OSC CREATED: Starting at audio time ${audioContext.currentTime.toFixed(3)}s with step 0 freq ${monoOsc.frequency.value.toFixed(1)}Hz`);
-
-            monoOsc.start();
-
-            // Store in AppState
-            appState.playback.monoOsc = monoOsc;
-            appState.playback.monoGain = monoGain;
+        if (isSchedulerReady()) {
+            sendToScheduler('play', {
+                notePatternLength: appState.playback.sequencePattern.steps.length,
+                phonemePatternLength: appState.playback.phonemePattern.vowels.length,
+                bpm: appState.params.bpm,
+                subdivision: appState.params.subdivision
+            });
+            appState.playback.isPlaying = true;
+            button.textContent = "■ Stop";
+        } else {
+            throw new Error("AudioWorklet scheduler not ready.");
         }
-    }
 
-    // Resume audio context if suspended (required for Chrome)
-    if (audioContext.state === 'suspended') {
-        console.log('🎵 Resuming suspended audio context...');
-        await audioContext.resume();
-    }
-    
-    // Start the AudioWorklet scheduler with pattern parameters
-    if (isSchedulerReady()) {
-        sendToScheduler('play', {
-            notePatternLength: appState.playback.sequencePattern.steps.length,
-            phonemePatternLength: appState.playback.phonemePattern.vowels.length,
-            bpm: appState.params.bpm,
-            subdivision: appState.params.subdivision
-        });
-        appState.playback.isPlaying = true;
-        console.log(`🎵 AUDIO WORKLET PLAY: note=${appState.playback.sequencePattern.steps.length} steps, phoneme=${appState.playback.phonemePattern.vowels.length} steps at ${appState.params.bpm} BPM (${appState.params.subdivision} subdivision), context state: ${audioContext.state}`);
-    } else {
-        console.error('❌ AudioWorklet scheduler not ready, cannot start playback');
+    } catch (error) {
+        console.error("Failed to start playback:", error);
+        appState.playback.isPlaying = false;
+        stopCurrentSynthesizer();
+        appState.playback.monoOsc = null;
         button.textContent = "▶ Play";
-        button.classList.remove("playing");
+    } finally {
+        appState.playback.isInitializing = false;
+        button.disabled = false;
     }
 }

@@ -64,7 +64,18 @@ export function displayColumn(columnId, frequencies, activeIndices, playNote) {
         item.appendChild(dot);
 
         if (freq > 0) {
-            item.onclick = () => playNote(freq);
+            item.onclick = () => {
+                // Use simple sine wave for individual tone clicks (not selected synthesis mode)
+                const osc = window.audioContext.createOscillator();
+                const gain = window.audioContext.createGain();
+                osc.connect(gain).connect(window.audioContext.destination);
+                osc.frequency.value = freq;
+                osc.type = "sine";
+                gain.gain.setValueAtTime(0.3, window.audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, window.audioContext.currentTime + 0.2);
+                osc.start();
+                osc.stop(window.audioContext.currentTime + 0.2);
+            };
         }
 
         container.appendChild(item);
@@ -81,7 +92,7 @@ export function updateSequenceVisualization(appState) {
         !appState.playback.sequencePattern.steps ||
         appState.playback.sequencePattern.steps.length === 0
     ) {
-        console.log("No sequence pattern to visualize");
+        // console.log("No sequence pattern to visualize");
         return;
     }
 

@@ -55,7 +55,7 @@ class SchedulerProcessor extends AudioWorkletProcessor {
             this.stepDuration = 60 / (this.bpm * this.subdivision);
           }
           
-          console.log(`🎵 AudioWorklet START: BPM=${this.bpm}, subdivision=${this.subdivision}, stepDuration=${this.stepDuration.toFixed(3)}s, notePattern=${this.notePatternLength}, phonemePattern=${this.phonemePatternLength}`);
+          // console.log(`🎵 AudioWorklet START: BPM=${this.bpm}, subdivision=${this.subdivision}, stepDuration=${this.stepDuration.toFixed(3)}s, notePattern=${this.notePatternLength}, phonemePattern=${this.phonemePatternLength}`);
           break;
           
         case 'stop':
@@ -63,19 +63,19 @@ class SchedulerProcessor extends AudioWorkletProcessor {
           this.lastGlobalStep = -1;
           this.lastNoteStep = -1;
           this.lastPhonemeStep = -1;
-          console.log('🎵 AudioWorklet STOP');
+          // console.log('🎵 AudioWorklet STOP');
           break;
           
         case 'setBpm':
           this.bpm = payload.bpm;
           this.stepDuration = 60 / (this.bpm * this.subdivision);
-          console.log(`🎵 AudioWorklet BPM: ${this.bpm} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
+          // console.log(`🎵 AudioWorklet BPM: ${this.bpm} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
           break;
           
         case 'setSubdivision':
           this.subdivision = payload.subdivision;
           this.stepDuration = 60 / (this.bpm * this.subdivision);
-          console.log(`🎵 AudioWorklet SUBDIVISION: ${this.subdivision} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
+          // console.log(`🎵 AudioWorklet SUBDIVISION: ${this.subdivision} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
           break;
           
         case 'setPatterns':
@@ -85,7 +85,7 @@ class SchedulerProcessor extends AudioWorkletProcessor {
           if (payload.phonemePatternLength) {
             this.phonemePatternLength = payload.phonemePatternLength;
           }
-          console.log(`🎵 AudioWorklet PATTERNS: note=${this.notePatternLength}, phoneme=${this.phonemePatternLength}`);
+          // console.log(`🎵 AudioWorklet PATTERNS: note=${this.notePatternLength}, phoneme=${this.phonemePatternLength}`);
           break;
       }
     };

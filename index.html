@@ -335,6 +335,143 @@
                 </div>
 
                 <div class="sequence-control-group">
+                    <h3>Synthesis</h3>
+                    <div class="control">
+                        <label>Type</label>
+                        <select id="synthType" style="width: 100%">
+                            <option value="zing">Morphing Zing</option>
+                            <option value="formant">Formant</option>
+                            <option value="sine">Sine</option>
+                        </select>
+                    </div>
+                    <div class="control zing-control" style="display: none">
+                        <label>Morph</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="morph"
+                                data-delta="-0.1"
+                                data-precision="1"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="morphValue"
+                                data-min="-1"
+                                data-max="1"
+                                data-default="0"
+                                data-precision="1"
+                            >
+                                0.0
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="morph"
+                                data-delta="0.1"
+                                data-precision="1"
+                            >
+                                +
+                            </button>
+                        </div>
+                        <div class="morph-label" id="morphLabel">Ring Modulation</div>
+                    </div>
+                    <div class="control zing-control" style="display: none">
+                        <label>Harmonic Ratio</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="harmonicRatio"
+                                data-delta="-0.1"
+                                data-precision="1"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="harmonicRatioValue"
+                                data-min="0.5"
+                                data-max="8"
+                                data-default="2"
+                                data-precision="1"
+                            >
+                                2.0
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="harmonicRatio"
+                                data-delta="0.1"
+                                data-precision="1"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control zing-control" style="display: none">
+                        <label>Mod Depth</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="modDepth"
+                                data-delta="-0.05"
+                                data-precision="2"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="modDepthValue"
+                                data-min="0"
+                                data-max="1"
+                                data-default="0.5"
+                                data-precision="2"
+                            >
+                                0.50
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="modDepth"
+                                data-delta="0.05"
+                                data-precision="2"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control zing-control" style="display: none">
+                        <label>Symmetry</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="symmetry"
+                                data-delta="-0.05"
+                                data-precision="2"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="symmetryValue"
+                                data-min="0"
+                                data-max="1"
+                                data-default="0.5"
+                                data-precision="2"
+                            >
+                                0.50
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="symmetry"
+                                data-delta="0.05"
+                                data-precision="2"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sequence-control-group formant-controls">
                     <h3>Vowel Synthesis</h3>
                     <div class="control">
                         <label>Phoneme Steps</label>

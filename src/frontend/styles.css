@@ -12,6 +12,18 @@ body {
     overflow-x: auto;
 }
 
+.morph-label {
+    font-size: 11px;
+    text-align: center;
+    margin-top: 4px;
+    color: #666;
+    font-style: italic;
+}
+
+.zing-control {
+    margin-bottom: 8px;
+}
+
 h1 {
     margin-bottom: 20px;
     font-size: 24px;
