@@ -10,14 +10,22 @@ class SchedulerProcessor extends AudioWorkletProcessor {
     
     // Scheduler state
     this.isPlaying = false;
-    this.phasor = 0; // 0-1 representing position in cycle
-    this.lastStep = -1;
-    this.cycleTimeMs = 2000; // Default: 30 CPM (60000 / 30)
-    this.patternLength = 6; // Number of steps in pattern
+    this.startTime = null;
+    this.lastGlobalStep = -1;
+    this.lastNoteStep = -1;
+    this.lastPhonemeStep = -1;
+    
+    // Timing parameters
+    this.bpm = 120; // Beats per minute
+    this.subdivision = 4; // 4 = quarter notes, 8 = 8th notes, 16 = 16th notes
+    this.stepDuration = 60 / (this.bpm * this.subdivision); // Duration of each step in seconds
+    
+    // Pattern lengths
+    this.notePatternLength = 8; // Note sequence length
+    this.phonemePatternLength = 5; // Phoneme sequence length
     
     // Timing tracking for debugging
     this.blockCount = 0;
-    this.startTime = null;
     
     // Handle messages from main thread
     this.port.onmessage = (event) => {
@@ -26,84 +34,127 @@ class SchedulerProcessor extends AudioWorkletProcessor {
       switch (type) {
         case 'play':
           this.isPlaying = true;
-          this.phasor = 0;
-          this.lastStep = -1;
+          this.lastGlobalStep = -1;
+          this.lastNoteStep = -1;
+          this.lastPhonemeStep = -1;
           this.blockCount = 0;
           this.startTime = currentTime;
           
-          if (payload.patternLength) {
-            this.patternLength = payload.patternLength;
+          if (payload.notePatternLength) {
+            this.notePatternLength = payload.notePatternLength;
           }
-          if (payload.cpm) {
-            this.cycleTimeMs = 60000 / payload.cpm;
+          if (payload.phonemePatternLength) {
+            this.phonemePatternLength = payload.phonemePatternLength;
+          }
+          if (payload.bpm) {
+            this.bpm = payload.bpm;
+            this.stepDuration = 60 / (this.bpm * this.subdivision);
+          }
+          if (payload.subdivision) {
+            this.subdivision = payload.subdivision;
+            this.stepDuration = 60 / (this.bpm * this.subdivision);
           }
           
-          console.log(`🎵 AudioWorklet START: CPM=${payload.cpm}, pattern=${this.patternLength}, cycle=${this.cycleTimeMs}ms`);
+          console.log(`🎵 AudioWorklet START: BPM=${this.bpm}, subdivision=${this.subdivision}, stepDuration=${this.stepDuration.toFixed(3)}s, notePattern=${this.notePatternLength}, phonemePattern=${this.phonemePatternLength}`);
           break;
           
         case 'stop':
           this.isPlaying = false;
-          this.phasor = 0;
-          this.lastStep = -1;
+          this.lastGlobalStep = -1;
+          this.lastNoteStep = -1;
+          this.lastPhonemeStep = -1;
           console.log('🎵 AudioWorklet STOP');
           break;
           
-        case 'setCpm':
-          this.cycleTimeMs = 60000 / payload.cpm;
-          console.log(`🎵 AudioWorklet CPM: ${payload.cpm} (cycle: ${this.cycleTimeMs}ms)`);
+        case 'setBpm':
+          this.bpm = payload.bpm;
+          this.stepDuration = 60 / (this.bpm * this.subdivision);
+          console.log(`🎵 AudioWorklet BPM: ${this.bpm} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
           break;
           
-        case 'setPattern':
-          this.patternLength = payload.patternLength;
-          console.log(`🎵 AudioWorklet PATTERN: ${this.patternLength} steps`);
+        case 'setSubdivision':
+          this.subdivision = payload.subdivision;
+          this.stepDuration = 60 / (this.bpm * this.subdivision);
+          console.log(`🎵 AudioWorklet SUBDIVISION: ${this.subdivision} (stepDuration: ${this.stepDuration.toFixed(3)}s)`);
+          break;
+          
+        case 'setPatterns':
+          if (payload.notePatternLength) {
+            this.notePatternLength = payload.notePatternLength;
+          }
+          if (payload.phonemePatternLength) {
+            this.phonemePatternLength = payload.phonemePatternLength;
+          }
+          console.log(`🎵 AudioWorklet PATTERNS: note=${this.notePatternLength}, phoneme=${this.phonemePatternLength}`);
           break;
       }
     };
   }
 
   process(inputs, outputs, parameters) {
-    if (!this.isPlaying) {
+    if (!this.isPlaying || !this.startTime) {
       return true; // Keep processor alive
     }
 
+    // Calculate elapsed time since start (in seconds)
+    const elapsedTime = currentTime - this.startTime;
+    
+    // Calculate global step counter (0, 1, 2, 3, 4, ... infinity)
+    const globalStep = Math.floor(elapsedTime / this.stepDuration);
+    
+    // Map global step to individual sequence steps
+    const noteStep = globalStep % this.notePatternLength;
+    const phonemeStep = globalStep % this.phonemePatternLength;
+
     // Debug: Log every 100 blocks to see if process is running
     if (this.blockCount % 100 === 0) {
-      // console.log(`🎵 WORKLET PROCESS: block ${this.blockCount}, phasor: ${this.phasor.toFixed(3)}, playing: ${this.isPlaying}`);
-    }
-
-    // Calculate sample-accurate time elapsed for this audio block
-    const blockSamples = outputs[0][0].length;
-    const blockTimeMs = (blockSamples / sampleRate) * 1000;
-    
-    // Advance phasor based on precise audio timing
-    this.phasor += blockTimeMs / this.cycleTimeMs;
-    
-    // Handle phasor wraparound (cycle completion)
-    if (this.phasor >= 1.0) {
-      this.phasor -= 1.0;
+      // console.log(`🎵 WORKLET PROCESS: block ${this.blockCount}, globalStep: ${globalStep}, noteStep: ${noteStep}, phonemeStep: ${phonemeStep}, playing: ${this.isPlaying}`);
     }
     
-    // Calculate current step from phasor position
-    const currentStep = Math.floor(this.phasor * this.patternLength);
-    
-    // Detect step changes and notify main thread
-    if (currentStep !== this.lastStep) {
-      const audioTimeElapsed = currentTime - (this.startTime || currentTime);
-      
-      // console.log(`🎵 WORKLET STEP CHANGE: ${this.lastStep} -> ${currentStep}, phasor: ${this.phasor.toFixed(3)}`);
-      
+    // Detect global step changes
+    if (globalStep !== this.lastGlobalStep) {
+      // Always send global step change
       this.port.postMessage({
-        type: 'stepChange',
+        type: 'globalStepChange',
         payload: {
-          step: currentStep,
-          phasor: this.phasor,
+          globalStep: globalStep,
+          noteStep: noteStep,
+          phonemeStep: phonemeStep,
+          elapsedTime: elapsedTime,
           audioTime: currentTime,
-          audioTimeElapsed: audioTimeElapsed,
           blockCount: this.blockCount
         }
       });
       
-      this.lastStep = currentStep;
+      this.lastGlobalStep = globalStep;
+    }
+    
+    // Detect note sequence step changes
+    if (noteStep !== this.lastNoteStep) {
+      this.port.postMessage({
+        type: 'noteStepChange',
+        payload: {
+          noteStep: noteStep,
+          globalStep: globalStep,
+          elapsedTime: elapsedTime
+        }
+      });
+      
+      this.lastNoteStep = noteStep;
+    }
+    
+    // Detect phoneme sequence step changes
+    if (phonemeStep !== this.lastPhonemeStep) {
+      this.port.postMessage({
+        type: 'phonemeStepChange',
+        payload: {
+          phonemeStep: phonemeStep,
+          globalStep: globalStep,
+          elapsedTime: elapsedTime
+        }
+      });
+      
+      this.lastPhonemeStep = phonemeStep;
     }
     
     this.blockCount++;

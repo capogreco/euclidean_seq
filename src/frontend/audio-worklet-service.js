@@ -82,22 +82,32 @@ export function isSchedulerReady() {
 }
 
 /**
- * Update the CPM (cycles per minute) in the scheduler
- * @param {number} cpm - New CPM value
+ * Update the BPM in the scheduler
+ * @param {number} bpm - New BPM value
  */
-export function updateSchedulerCpm(cpm) {
-  sendToScheduler('setCpm', { cpm });
+export function updateSchedulerBpm(bpm) {
+  sendToScheduler('setBpm', { bpm });
 }
 
 /**
- * Update the pattern in the scheduler
- * @param {number} patternLength - Number of steps in the pattern
+ * Update the subdivision in the scheduler
+ * @param {number} subdivision - Subdivision (1, 2, 4, 8, 16)
+ */
+export function updateSchedulerSubdivision(subdivision) {
+  sendToScheduler('setSubdivision', { subdivision });
+}
+
+/**
+ * Update the pattern lengths in the scheduler
+ * @param {number} notePatternLength - Number of steps in note pattern
+ * @param {number} phonemePatternLength - Number of steps in phoneme pattern
  * @param {boolean[]} rhythm - Rhythm pattern array
  * @param {boolean[]} portamento - Portamento pattern array
  */
-export function updateSchedulerPattern(patternLength, rhythm, portamento) {
-  sendToScheduler('setPattern', { 
-    patternLength,
+export function updateSchedulerPatterns(notePatternLength, phonemePatternLength, rhythm, portamento) {
+  sendToScheduler('setPatterns', { 
+    notePatternLength,
+    phonemePatternLength,
     rhythm,
     portamento
   });

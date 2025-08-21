@@ -94,8 +94,48 @@ export function updateSequenceVisualization(appState) {
         ),
     ].sort((a, b) => b - a);
 
-    // Create grid table
-    let html = '<table class="sequence-grid">';
+    let html = '';
+    
+    // Create phoneme sequence table first (if phoneme pattern exists)
+    if (appState.playback.phonemePattern.vowels && appState.playback.phonemePattern.vowels.length > 0) {
+        const phonemeLength = appState.playback.phonemePattern.vowels.length;
+        
+        const noteLength = appState.playback.sequencePattern.steps.length;
+        const lcm = (a, b) => Math.abs(a * b) / gcd(a, b);
+        const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+        const cycleLength = lcm(noteLength, phonemeLength);
+        
+        html += `<div class="sequence-section-label">Phoneme Sequence (${phonemeLength} steps • ${cycleLength}-step cycle)</div>`;
+        html += '<table class="sequence-grid phoneme-sequence">';
+        
+        // Phoneme step headers
+        html += '<tr><td class="freq-label"></td>';
+        for (let i = 0; i < phonemeLength; i++) {
+            html += `<td class="step-header">${i + 1}</td>`;
+        }
+        html += '</tr>';
+        
+        // Phoneme vowels row
+        html += '<tr><td class="freq-label phoneme-label">Vowel</td>';
+        const currentPhonemeStep = appState.playback.phonemePattern.currentStep;
+        for (let i = 0; i < phonemeLength; i++) {
+            const vowel = appState.playback.phonemePattern.vowels[i];
+            const isCurrent = appState.playback.isPlaying && i === currentPhonemeStep;
+            
+            html += `<td class="phoneme-cell ${isCurrent ? "current-column" : ""}">`;
+            html += `<div class="phoneme-vowel ${isCurrent ? "current-phoneme" : ""}">${vowel}</div>`;
+            html += '</td>';
+        }
+        html += '</tr>';
+        
+        html += '</table>';
+        html += '<div class="sequence-spacer"></div>';
+    }
+
+    // Create note sequence grid table
+    const noteLength = appState.playback.sequencePattern.steps.length;
+    html += `<div class="sequence-section-label">Note Sequence (${noteLength} steps)</div>`;
+    html += '<table class="sequence-grid note-sequence">';
 
     // Step headers row
     html += '<tr><td class="freq-label"></td>';
@@ -270,11 +310,12 @@ export function setupValueControls(handleValueChange) {
 
 function handleValueButtonClick(btn, handleValueChange) {
     const target = btn.dataset.target;
-    const delta = parseInt(btn.dataset.delta);
+    const delta = parseFloat(btn.dataset.delta);
     const display = document.getElementById(target + "Value");
-    const min = parseInt(display.dataset.min);
-    const max = parseInt(display.dataset.max);
-    let value = parseInt(display.textContent);
+    const min = parseFloat(display.dataset.min);
+    const max = parseFloat(display.dataset.max);
+    const precision = parseInt(display.dataset.precision) || 0;
+    let value = parseFloat(display.textContent);
 
     // Check if this is a rotation control for circular behavior
     const isRotationControl = target.toLowerCase().includes('rotation');
@@ -290,6 +331,13 @@ function handleValueButtonClick(btn, handleValueChange) {
     } else {
         // Standard clamping behavior for non-rotation controls
         value = Math.max(min, Math.min(max, value + delta));
+    }
+    
+    // Round to specified precision
+    if (precision > 0) {
+        value = parseFloat(value.toFixed(precision));
+    } else {
+        value = Math.round(value);
     }
     
     display.textContent = value;

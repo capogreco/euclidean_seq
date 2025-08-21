@@ -23,31 +23,39 @@
                 <div class="sequence-control-group">
                     <h3>Tempo</h3>
                     <div class="control">
-                        <label>CPM</label>
+                        <label>BPM</label>
                         <div class="value-control">
                             <button
                                 class="value-btn"
-                                data-target="cpm"
+                                data-target="bpm"
                                 data-delta="-5"
                             >
                                 −
                             </button>
                             <div
                                 class="value-display"
-                                id="cpmValue"
-                                data-min="10"
-                                data-max="240"
-                                data-default="30"
+                                id="bpmValue"
+                                data-min="60"
+                                data-max="200"
+                                data-default="120"
                             >
-                                30
+                                120
                             </div>
                             <button
                                 class="value-btn"
-                                data-target="cpm"
+                                data-target="bpm"
                                 data-delta="5"
                             >
                                 +
                             </button>
+                        </div>
+                    </div>
+                    <div class="control">
+                        <label>Subdivision</label>
+                        <div class="value-control">
+                            <button class="value-btn" data-target="subdivision" data-delta="-1">-</button>
+                            <span class="value-display" id="subdivisionValue" data-min="1" data-max="32" data-default="4">4</span>
+                            <button class="value-btn" data-target="subdivision" data-delta="1">+</button>
                         </div>
                     </div>
                 </div>
@@ -323,6 +331,58 @@
                                 +
                             </button>
                         </div>
+                    </div>
+                </div>
+
+                <div class="sequence-control-group">
+                    <h3>Vowel Synthesis</h3>
+                    <div class="control">
+                        <label>Phoneme Steps</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="phonemeSteps"
+                                data-delta="-1"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="phonemeStepsValue"
+                                data-min="1"
+                                data-max="32"
+                                data-default="5"
+                            >
+                                5
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="phonemeSteps"
+                                data-delta="1"
+                            >
+                                +
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control">
+                        <label>Manual Vowel</label>
+                        <select id="vowelPreset" style="width: 100%">
+                            <option value="sequence">Use Sequence</option>
+                            <option value="a">/a/ (father)</option>
+                            <option value="e">/e/ (bet)</option>
+                            <option value="i">/i/ (beat)</option>
+                            <option value="o">/o/ (bought)</option>
+                            <option value="u">/u/ (boot)</option>
+                        </select>
+                    </div>
+                    <div class="control">
+                        <button
+                            class="play-button"
+                            id="regeneratePhonemes"
+                            style="background: #fff"
+                        >
+                            ↻ New Phonemes
+                        </button>
                     </div>
                 </div>
 

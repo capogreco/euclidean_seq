@@ -14,7 +14,8 @@ export class AppState {
             sequenceBase: 0,
             sequenceOctaves: 2,
             sequenceRotation: 0,
-            cpm: 30,
+            bpm: 120,
+            subdivision: 4, // Quarter notes
             portamentoSteps: 4,
             portamentoRotation: 0,
             portamentoTime: 50, // Percentage of step length (0-100%)
@@ -26,6 +27,9 @@ export class AppState {
             synthMode: "mono",
             sequenceOrder: "forward",
             randomSeed: 12345, // For deterministic shuffle/random
+            vowelX: 0.5, // Front/back position (0=back, 1=front)
+            vowelY: 0.5, // Close/open position (0=close, 1=open)
+            phonemeSteps: 5, // Length of phoneme sequence (independent of note sequence)
         };
 
         // Playback State
@@ -35,6 +39,11 @@ export class AppState {
                 steps: [],
                 rhythm: [],
                 portamento: [],
+                currentStep: 0,
+            },
+            phonemePattern: {
+                vowels: [], // Array of vowel characters: ['a', 'e', 'i', etc.]
+                positions: [], // Array of {x, y} vowel positions
                 currentStep: 0,
             },
             playIntervals: {
@@ -119,7 +128,7 @@ export class AppState {
             "sequenceBase",
             "sequenceOctaves",
             "sequenceRotation",
-            "cpm",
+            "subdivision",
             "portamentoSteps",
             "portamentoRotation",
             "portamentoTime",
@@ -138,7 +147,7 @@ export class AppState {
             }
         });
 
-        // Special cases
+        // Special cases - dropdown elements
         const modeElement = document.getElementById("synthMode");
         if (modeElement) this.params.synthMode = modeElement.value;
 
@@ -147,6 +156,9 @@ export class AppState {
 
         const methodElement = document.getElementById("sequenceMethod");
         if (methodElement) this.params.sequenceMethod = methodElement.value;
+        
+        const bpmElement = document.getElementById("bpm");
+        if (bpmElement) this.params.bpm = parseInt(bpmElement.value);
     }
 
     // Sync to DOM elements
@@ -158,12 +170,13 @@ export class AppState {
             }
         });
 
-        // Special cases
+        // Special cases - dropdown elements
         document.getElementById("synthMode").value = this.params.synthMode;
         document.getElementById("sequenceOrder").value =
             this.params.sequenceOrder;
         document.getElementById("sequenceMethod").value =
             this.params.sequenceMethod;
+        document.getElementById("bpm").value = this.params.bpm;
     }
 
 

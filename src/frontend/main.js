@@ -3,9 +3,10 @@ import { AppState } from './state.js';
 import { TonePipeline } from './toneGenerator.js';
 import { generateToneData, orderTones } from './toneEngine.js';
 import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
-import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep } from './audio.js';
+import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep, updateSynthVowel } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
-import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerCpm, updateSchedulerPattern } from './audio-worklet-service.js';
+import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerBpm, updateSchedulerSubdivision, updateSchedulerPatterns } from './audio-worklet-service.js';
+import { initializeFormantSynth, setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
 
 // Pattern utility functions are now imported from euclidean.js
 
@@ -18,20 +19,37 @@ window.appState = appState;
 window.pipeline = pipeline;
 window.updateSequenceVisualization = () => updateSequenceVisualization(appState);
 
-// Central coordination function (moved from AppState)
-function triggerSequenceStep(step) {
-    const freq = appState.playback.sequencePattern.steps[step];
-    const mode = appState.params.synthMode;
+// Get vowel position for current step
+function getCurrentVowelPosition(step) {
+    const vowelPreset = document.getElementById("vowelPreset").value;
     
-    console.log(`🎵 STEP ${step}: mode=${mode}, freq=${freq}, pattern length=${appState.playback.sequencePattern.steps.length}`);
-    
-    if (!freq) return; // No frequency for this step
-    
-    if (mode === 'mono') {
-        triggerMonoStep(appState, step, freq);
-    } else {
-        triggerPolyStep(appState, step, freq);
+    // If using manual vowel setting, return that
+    if (vowelPreset !== "sequence") {
+        const vowelPositions = {
+            'a': { x: 0.8, y: 0.9 },  // /a/ - back, open
+            'e': { x: 0.7, y: 0.4 },  // /e/ - front-central, mid
+            'i': { x: 1.0, y: 0.1 },  // /i/ - front, close
+            'o': { x: 0.2, y: 0.4 },  // /o/ - back, mid
+            'u': { x: 0.0, y: 0.1 }   // /u/ - back, close
+        };
+        return vowelPositions[vowelPreset] || { x: 0.5, y: 0.5 };
     }
+    
+    // Use phoneme sequence
+    const phonemePattern = appState.playback.phonemePattern;
+    if (!phonemePattern.positions || phonemePattern.positions.length === 0) {
+        return { x: 0.5, y: 0.5 }; // Default vowel position
+    }
+    
+    // Map sequence step to phoneme step
+    const phonemeStep = step % phonemePattern.positions.length;
+    return phonemePattern.positions[phonemeStep];
+}
+
+// Legacy function - no longer used (replaced by separate note/phoneme step handling)
+// Kept for compatibility with any remaining references
+function triggerSequenceStep(step) {
+    console.warn('⚠️ triggerSequenceStep is deprecated - using separate note/phoneme step handling');
 }
 
 // Controller functions (moved from ui.js)
@@ -45,8 +63,32 @@ function handleValueChange(display, value) {
     handleControlChange(target, value);
 
     // Sync real-time parameters that don't need full tone regeneration
-    if (['portamentoTime', 'attackTime', 'decayTime'].includes(target)) {
+    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision'].includes(target)) {
         appState.set(target, value);
+        
+        // Update formant synthesizer for vowel changes
+        if (['vowelX', 'vowelY'].includes(target) && isFormantSynthReady()) {
+            const vowelX = appState.params.vowelX;
+            const vowelY = appState.params.vowelY;
+            setVowelPosition(vowelX, vowelY);
+            
+            // Reset vowel preset to custom when manually adjusting
+            document.getElementById("vowelPreset").value = "custom";
+        }
+        
+        // Regenerate phoneme pattern when steps change
+        if (target === 'phonemeSteps') {
+            generatePhonemePattern();
+            updateSequenceVisualization(appState);
+        }
+        
+        // Update scheduler timing when BPM or subdivision changes
+        if (target === 'bpm' && isSchedulerReady()) {
+            updateSchedulerBpm(value);
+        }
+        if (target === 'subdivision' && isSchedulerReady()) {
+            updateSchedulerSubdivision(value);
+        }
     }
 
     // Only call generateTones for parameters that affect tone generation
@@ -58,12 +100,16 @@ function handleValueChange(display, value) {
             'portamentoTime',
             'attackTime',
             'decayTime',
-            'cpm',
+            'bpm',
+            'subdivision',
             'scaleRotation',
             'chordRotation',
             'sequenceRotation',
             'sequenceBase',
             'sequenceOctaves',
+            'vowelX',
+            'vowelY',
+            'phonemeSteps',
         ].includes(target)
     ) {
         generateTones();
@@ -148,8 +194,9 @@ function regenerateEverything() {
     
     // If playing, update the AudioWorklet with the new pattern
     if (appState.playback.isPlaying && appState.playback.sequencePattern.steps) {
-        updateSchedulerPattern(
+        updateSchedulerPatterns(
             appState.playback.sequencePattern.steps.length,
+            appState.playback.phonemePattern.vowels.length,
             appState.playback.sequencePattern.rhythm,
             appState.playback.sequencePattern.portamento
         );
@@ -256,6 +303,52 @@ Object.defineProperty(window, "currentMonoFreq", {
     get: () => appState.playback.currentMonoFreq,
     set: (val) => (appState.playback.currentMonoFreq = val),
 });
+
+// Generate random phoneme sequence with no consecutive repeats
+function generatePhonemePattern() {
+    const phonemeSteps = appState.params.phonemeSteps;
+    const vowels = ['a', 'e', 'i', 'o', 'u'];
+    
+    // Vowel position mappings based on IPA vowel chart
+    const vowelPositions = {
+        'a': { x: 0.8, y: 0.9 },  // /a/ - back, open
+        'e': { x: 0.7, y: 0.4 },  // /e/ - front-central, mid
+        'i': { x: 1.0, y: 0.1 },  // /i/ - front, close
+        'o': { x: 0.2, y: 0.4 },  // /o/ - back, mid
+        'u': { x: 0.05, y: 0.1 }  // /u/ - back, close (avoid exact 0.0)
+    };
+    
+    const selectedVowels = [];
+    const selectedPositions = [];
+    let lastVowel = null;
+    
+    // Use seeded random for consistent results
+    let seed = appState.params.randomSeed;
+    function seededRandom() {
+        seed = (seed * 1664525 + 1013904223) % (2**32);
+        return seed / (2**32);
+    }
+    
+    for (let i = 0; i < phonemeSteps; i++) {
+        // Get available vowels (exclude last vowel to prevent repeats)
+        const availableVowels = vowels.filter(v => v !== lastVowel);
+        
+        // Select random vowel from available options
+        const randomIndex = Math.floor(seededRandom() * availableVowels.length);
+        const selectedVowel = availableVowels[randomIndex];
+        
+        selectedVowels.push(selectedVowel);
+        selectedPositions.push(vowelPositions[selectedVowel]);
+        lastVowel = selectedVowel;
+    }
+    
+    // Store in app state
+    appState.playback.phonemePattern.vowels = selectedVowels;
+    appState.playback.phonemePattern.positions = selectedPositions;
+    appState.playback.phonemePattern.currentStep = 0;
+    
+    console.log(`🗣️ Generated phoneme pattern: [${selectedVowels.join(', ')}] (${phonemeSteps} steps - polyrhythmic with note sequence)`);
+}
 
 // Sequence generation functions
 function generateSequencePattern() {
@@ -427,7 +520,10 @@ function generateSequencePattern() {
             : 0,
     };
     
-    console.log(`🎵 PATTERN GENERATED: mode=${mode}, steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}]`);
+    // Generate phoneme pattern (independent length)
+    generatePhonemePattern();
+    
+    console.log(`🎵 PATTERN GENERATED: mode=${mode}, steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}], portamento=[${portamento.join(', ')}]`);
 }
 
 // Update only the portamento pattern without changing the note order
@@ -688,6 +784,41 @@ document.getElementById("synthMode").onchange = (e) => {
     updateSequenceVisualization(appState);
 };
 
+// Vowel preset selector handler
+document.getElementById("vowelPreset").onchange = (e) => {
+    const preset = e.target.value;
+    
+    // If "Use Sequence" is selected, no manual vowel override needed
+    if (preset === "sequence") {
+        // Just update the formant synth to use current sequence vowel if playing
+        return;
+    }
+    
+    // Vowel position mappings based on IPA vowel chart
+    const vowelPositions = {
+        'a': { x: 0.8, y: 0.9 },  // /a/ - back, open
+        'e': { x: 0.7, y: 0.4 },  // /e/ - front-central, mid
+        'i': { x: 1.0, y: 0.1 },  // /i/ - front, close
+        'o': { x: 0.2, y: 0.4 },  // /o/ - back, mid
+        'u': { x: 0.0, y: 0.1 }   // /u/ - back, close
+    };
+    
+    if (vowelPositions[preset]) {
+        const pos = vowelPositions[preset];
+        
+        // Update app state for manual vowel override
+        appState.set('vowelX', pos.x);
+        appState.set('vowelY', pos.y);
+        
+        // Update formant synth if active
+        if (isFormantSynthReady()) {
+            setVowelPosition(pos.x, pos.y);
+        }
+    }
+};
+
+// Subdivision is now handled by the value control system via handleValueChange
+
 // Button event listeners
 document.getElementById("playBase").onclick = () => 
     togglePlay("base", appState, currentData, playIntervals, playIndices);
@@ -712,6 +843,17 @@ document.getElementById("reshuffleButton").onclick = () => {
     updateSequenceVisualization(appState);
 };
 
+// Regenerate phonemes button
+document.getElementById("regeneratePhonemes").onclick = () => {
+    // Generate new random seed for fresh phonemes
+    const newSeed = Math.floor(Math.random() * 1000000);
+    appState.set('randomSeed', newSeed);
+    
+    // Regenerate phoneme pattern
+    generatePhonemePattern();
+    updateSequenceVisualization(appState);
+};
+
 // Randomize button for random sequence method
 document.getElementById("randomizeSequence").onclick = () => {
     // Generate new random seed for fresh randomization
@@ -727,21 +869,50 @@ async function initializeApp() {
     // Sync state from DOM
     appState.syncFromDOM();
 
-    // Initialize AudioWorklet scheduler
+    // Initialize AudioWorklet scheduler and formant synthesizer
     await initializeAudioWorklet();
+    await initializeFormantSynth();
     
     // Set up worklet message handling
     const schedulerNode = getSchedulerNode();
     if (schedulerNode) {
         schedulerNode.port.onmessage = (event) => {
             const { type, payload } = event.data;
-            if (type === 'stepChange') {
-                // console.log(`🎵 WORKLET STEP: ${payload.step} at audio time ${payload.audioTimeElapsed.toFixed(3)}s (phasor: ${payload.phasor.toFixed(3)})`);
+            
+            if (type === 'globalStepChange') {
+                // Update current step tracking for visualization
+                appState.playback.sequencePattern.currentStep = payload.noteStep;
+                appState.playback.phonemePattern.currentStep = payload.phonemeStep;
                 
-                // Update state and trigger audio/visual updates
-                appState.playback.sequencePattern.currentStep = payload.step;
-                triggerSequenceStep(payload.step);
+                // Update visualization to show both sequences
                 updateSequenceVisualization(appState);
+                
+                // console.log(`🎵 GLOBAL STEP ${payload.globalStep}: note[${payload.noteStep}] phoneme[${payload.phonemeStep}] time=${payload.elapsedTime.toFixed(3)}s`);
+            }
+            
+            if (type === 'noteStepChange') {
+                // Trigger note sequence step (no phoneme coupling)
+                const freq = appState.playback.sequencePattern.steps[payload.noteStep];
+                if (freq) {
+                    const mode = appState.params.synthMode;
+                    
+                    console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz`);
+                    
+                    if (mode === 'mono') {
+                        triggerMonoStep(appState, payload.noteStep, freq);
+                    } else {
+                        triggerPolyStep(appState, payload.noteStep, freq);
+                    }
+                }
+            }
+            
+            if (type === 'phonemeStepChange') {
+                // Update synthesizer vowel in real-time (independent of note triggers)
+                const vowelPosition = appState.playback.phonemePattern.positions[payload.phonemeStep];
+                if (vowelPosition) {
+                    updateSynthVowel(appState, vowelPosition);
+                }
+                console.log(`🗣️ PHONEME STEP ${payload.phonemeStep}: vowel=${appState.playback.phonemePattern.vowels[payload.phonemeStep] || 'none'} -> (${vowelPosition?.x.toFixed(2)}, ${vowelPosition?.y.toFixed(2)})`);
             }
         };
         console.log('🎵 AudioWorklet message handler set up');

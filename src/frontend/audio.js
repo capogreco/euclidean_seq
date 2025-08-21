@@ -1,5 +1,12 @@
-// Import AudioWorklet service for scheduling
+// Import AudioWorklet services
 import { sendToScheduler, isSchedulerReady } from './audio-worklet-service.js';
+import { 
+    initializeFormantSynth, 
+    playFormantNote, 
+    createFormantOscillator, 
+    isFormantSynthReady,
+    setFormantActive 
+} from './formant-synth-service.js';
 
 // Audio context initialization
 export const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -31,7 +38,19 @@ export function playNote(
     duration = 200,
     portamentoTime = 0,
     previousFreq = null,
+    appState = null
 ) {
+    // Try to use formant synthesis if available
+    if (isFormantSynthReady() && appState) {
+        const vowelX = appState.params.vowelX || 0.5;
+        const vowelY = appState.params.vowelY || 0.5;
+        
+        if (playFormantNote(frequency, duration, vowelX, vowelY)) {
+            return; // Successfully used formant synthesis
+        }
+    }
+    
+    // Fallback to sine wave synthesis
     const osc = audioContext.createOscillator();
     const gain = audioContext.createGain();
 
@@ -127,7 +146,7 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
 
             const freq = currentTones[currentIndex];
             if (freq > 0) {
-                playNote(freq, 180);
+                playNote(freq, 180, 0, null, appState);
             }
 
             playIndices[type] =
@@ -139,69 +158,90 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
     }
 }
 
+// Real-time vowel updates for synthesizer
+export function updateSynthVowel(appState, vowelPosition) {
+    if (!vowelPosition) return;
+    
+    const { x: vowelX, y: vowelY } = vowelPosition;
+    
+    // Update mono oscillator if active
+    if (appState.playback.monoOsc && appState.playback.monoOsc.setVowel && typeof appState.playback.monoOsc.setVowel === 'function') {
+        appState.playback.monoOsc.setVowel(vowelX, vowelY);
+    }
+    
+    // Update formant synthesis parameters
+    if (isFormantSynthReady()) {
+        setFormantActive(vowelX, vowelY);
+    }
+}
+
 // Audio step trigger functions (moved from state.js)
 export function triggerMonoStep(appState, step, freq) {
     if (!appState.playback.monoOsc) return;
 
+    const previousFreq = appState.playback.currentMonoFreq;
     const hasPortamento = appState.playback.sequencePattern.portamento[step];
     const now = window.audioContext.currentTime;
-    
-    // console.log(`🎶 MONO STEP ${step}: freq=${freq.toFixed(1)}Hz, portamento=${hasPortamento}, audio time: ${now.toFixed(3)}s`);
 
-    if (
-        hasPortamento &&
-        appState.playback.currentMonoFreq &&
-        appState.playback.currentMonoFreq !== freq
-    ) {
-        appState.playback.monoOsc.frequency.cancelScheduledValues(now);
-        const currentFreq = appState.playback.monoOsc.frequency.value;
-        appState.playback.monoOsc.frequency.setValueAtTime(currentFreq, now);
-        // Calculate portamento time as percentage of step length
-        const cpm = appState.params.cpm;
-        const patternLength = appState.playback.sequencePattern.steps.length;
-        const cycleTimeSeconds = 60 / cpm; // One complete cycle time in seconds
-        const stepTimeSeconds = cycleTimeSeconds / patternLength; // Time per step
-        const portamentoPercentage = appState.params.portamentoTime / 100; // Convert percentage to decimal
-        const portamentoTime = stepTimeSeconds * portamentoPercentage;
+    // Determine the correct AudioParam for frequency based on the oscillator type.
+    const frequencyParam = appState.playback.monoOsc.parameters 
+        ? appState.playback.monoOsc.parameters.get('frequency')  // For AudioWorkletNode
+        : appState.playback.monoOsc.frequency;                   // For standard OscillatorNode
+
+    if (hasPortamento && previousFreq && previousFreq !== freq) {
+        // --- CORRECT PORTAMENTO IMPLEMENTATION ---
+
+        // 1. Clear any scheduled changes from this point forward. This creates a clean slate.
+        frequencyParam.cancelScheduledValues(now);
         
-        // console.log(`🎶 PORTAMENTO: ${appState.params.portamentoTime}% of ${stepTimeSeconds.toFixed(3)}s step = ${portamentoTime.toFixed(3)}s`);
+        // 2. Explicitly set the starting point of the ramp to the previous note's frequency.
+        // This is the most critical step: it anchors the slide's start, preventing the audible "jump".
+        frequencyParam.setValueAtTime(previousFreq, now);
 
-        // Use exponential ramp for musical intervals, linear ramp as fallback
-        try {
-            if (currentFreq > 0 && freq > 0) {
-                appState.playback.monoOsc.frequency.exponentialRampToValueAtTime(
-                    freq,
-                    now + portamentoTime,
-                );
-            } else {
-                appState.playback.monoOsc.frequency.linearRampToValueAtTime(
-                    freq,
-                    now + portamentoTime,
-                );
-            }
-        } catch (e) {
-            // Fallback to linear ramp if exponential fails
-            appState.playback.monoOsc.frequency.linearRampToValueAtTime(
-                freq,
-                now + portamentoTime,
-            );
-        }
+        // 3. Calculate the duration of the portamento slide based on BPM and subdivision.
+        const bpm = appState.params.bpm;
+        const subdivision = appState.params.subdivision;
+        const stepTimeSeconds = 60 / (bpm * subdivision);
+        const portamentoPercentage = appState.params.portamentoTime / 100;
+        let portamentoTime = stepTimeSeconds * portamentoPercentage;
+        
+        // 4. Ensure the slide has time to finish before the next step begins.
+        const maxPortamentoTime = stepTimeSeconds - 0.01; // 10ms safety buffer
+        portamentoTime = Math.min(portamentoTime, maxPortamentoTime);
+        
+        // 5. Schedule the smooth pitch slide to the new target frequency.
+        frequencyParam.linearRampToValueAtTime(freq, now + portamentoTime);
+
     } else {
-        // Non-portamento step: cancel any ongoing portamento and jump immediately
-        appState.playback.monoOsc.frequency.cancelScheduledValues(now);
-        appState.playback.monoOsc.frequency.setValueAtTime(
-            appState.playback.monoOsc.frequency.value,
-            now,
-        );
-        appState.playback.monoOsc.frequency.setValueAtTime(freq, now);
+        // --- NON-PORTAMENTO IMPLEMENTATION ---
+        // For notes without portamento, cancel any ongoing slides and jump immediately to the new frequency.
+        frequencyParam.cancelScheduledValues(now);
+        frequencyParam.setValueAtTime(freq, now);
     }
+    
+    // Finally, update the application's state with the new target frequency.
+    // This will be used as the starting point for the *next* step.
     appState.playback.currentMonoFreq = freq;
 }
 
 export function triggerPolyStep(appState, step, freq) {
     const attackTime = appState.params.attackTime;
     const decayTime = appState.params.decayTime;
-
+    
+    // Try to use formant synthesis for poly steps
+    if (isFormantSynthReady()) {
+        // Use fallback vowel values for poly steps (current app state)
+        const vowelX = appState.params.vowelX || 0.5;
+        const vowelY = appState.params.vowelY || 0.5;
+        
+        const duration = attackTime + decayTime;
+        
+        if (playFormantNote(freq, duration, vowelX, vowelY)) {
+            return; // Successfully used formant synthesis
+        }
+    }
+    
+    // Fallback to sine wave synthesis
     const osc = window.audioContext.createOscillator();
     const gain = window.audioContext.createGain();
 
@@ -268,30 +308,54 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
     button.classList.add("playing");
 
     if (mode === "mono") {
-        // Create persistent oscillator for mono mode
-        const monoOsc = audioContext.createOscillator();
-        const monoGain = audioContext.createGain();
-
-        monoOsc.connect(monoGain);
-        monoGain.connect(audioContext.destination);
-
-        monoOsc.type = "sine";
-        monoGain.gain.value = 0.3;
-
-        // Set initial frequency to step 0 frequency immediately
-        const step0Freq = appState.playback.sequencePattern.steps[0];
-        if (step0Freq) {
-            monoOsc.frequency.value = step0Freq;
-            appState.playback.currentMonoFreq = step0Freq;
+        // Try to use formant synthesis for mono mode
+        if (isFormantSynthReady()) {
+            const step0Freq = appState.playback.sequencePattern.steps[0] || 220;
+            const vowelX = appState.params.vowelX || 0.5;
+            const vowelY = appState.params.vowelY || 0.5;
+            
+            // Create formant oscillator interface
+            const formantOsc = createFormantOscillator(step0Freq, vowelX, vowelY);
+            if (formantOsc) {
+                formantOsc.start();
+                appState.playback.monoOsc = formantOsc;
+                appState.playback.currentMonoFreq = step0Freq;
+                
+                console.log(`🎤 FORMANT OSC CREATED: Starting at audio time ${audioContext.currentTime.toFixed(3)}s with step 0 freq ${step0Freq.toFixed(1)}Hz`);
+            } else {
+                // Fallback to sine if formant creation failed
+                createSineOscillator();
+            }
+        } else {
+            // Fallback to sine oscillator
+            createSineOscillator();
         }
+        
+        function createSineOscillator() {
+            const monoOsc = audioContext.createOscillator();
+            const monoGain = audioContext.createGain();
 
-        console.log(`🎤 MONO OSC CREATED: Starting at audio time ${audioContext.currentTime.toFixed(3)}s with step 0 freq ${monoOsc.frequency.value.toFixed(1)}Hz`);
+            monoOsc.connect(monoGain);
+            monoGain.connect(audioContext.destination);
 
-        monoOsc.start();
+            monoOsc.type = "sine";
+            monoGain.gain.value = 0.3;
 
-        // Store in AppState
-        appState.playback.monoOsc = monoOsc;
-        appState.playback.monoGain = monoGain;
+            // Set initial frequency to step 0 frequency immediately
+            const step0Freq = appState.playback.sequencePattern.steps[0];
+            if (step0Freq) {
+                monoOsc.frequency.value = step0Freq;
+                appState.playback.currentMonoFreq = step0Freq;
+            }
+
+            console.log(`🎤 SINE OSC CREATED: Starting at audio time ${audioContext.currentTime.toFixed(3)}s with step 0 freq ${monoOsc.frequency.value.toFixed(1)}Hz`);
+
+            monoOsc.start();
+
+            // Store in AppState
+            appState.playback.monoOsc = monoOsc;
+            appState.playback.monoGain = monoGain;
+        }
     }
 
     // Resume audio context if suspended (required for Chrome)
@@ -303,11 +367,13 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
     // Start the AudioWorklet scheduler with pattern parameters
     if (isSchedulerReady()) {
         sendToScheduler('play', {
-            patternLength: appState.playback.sequencePattern.steps.length,
-            cpm: appState.params.cpm
+            notePatternLength: appState.playback.sequencePattern.steps.length,
+            phonemePatternLength: appState.playback.phonemePattern.vowels.length,
+            bpm: appState.params.bpm,
+            subdivision: appState.params.subdivision
         });
         appState.playback.isPlaying = true;
-        console.log(`🎵 AUDIO WORKLET PLAY: ${appState.playback.sequencePattern.steps.length} steps at ${appState.params.cpm} CPM, context state: ${audioContext.state}`);
+        console.log(`🎵 AUDIO WORKLET PLAY: note=${appState.playback.sequencePattern.steps.length} steps, phoneme=${appState.playback.phonemePattern.vowels.length} steps at ${appState.params.bpm} BPM (${appState.params.subdivision} subdivision), context state: ${audioContext.state}`);
     } else {
         console.error('❌ AudioWorklet scheduler not ready, cannot start playback');
         button.textContent = "▶ Play";
