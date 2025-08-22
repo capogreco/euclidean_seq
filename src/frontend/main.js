@@ -78,7 +78,7 @@ function handleValueChange(display, value) {
     handleControlChange(target, value);
 
     // Sync real-time parameters that don't need full tone regeneration
-    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'morph', 'harmonicRatio', 'modDepth', 'symmetry'].includes(target)) {
+    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'synthBlend', 'morph', 'symmetry'].includes(target)) {
         appState.set(target, value);
         
         // Update formant synthesizer for vowel changes
@@ -91,11 +91,11 @@ function handleValueChange(display, value) {
             document.getElementById("vowelPreset").value = "custom";
         }
         
-        // Update Morphing Zing synthesizer parameters
-        if (['morph', 'harmonicRatio', 'modDepth', 'symmetry'].includes(target)) {
-            // Update current synthesizer parameters if it's a Zing synth
+        // Update Vowel synthesizer parameters
+        if (['synthBlend', 'morph', 'symmetry'].includes(target)) {
+            // Update current synthesizer parameters if it's a vowel synth
             const currentSynth = getCurrentSynthesizer();
-            if (currentSynth && currentSynth.type === 'zing') {
+            if (currentSynth && (currentSynth.type === 'vowel' || currentSynth.type === 'zing')) {
                 const params = {};
                 params[target] = value;
                 currentSynth.setParams(params);
@@ -134,9 +134,8 @@ function handleValueChange(display, value) {
             'bpm',
             'subdivision',
             'morph',
-            'harmonicRatio',
-            'modDepth',
             'symmetry',
+            'synthBlend',
             'scaleRotation',
             'chordRotation',
             'sequenceRotation',
@@ -852,27 +851,7 @@ document.getElementById("vowelPreset").onchange = (e) => {
     }
 };
 
-// Synthesis type control handler
-document.getElementById("synthType").onchange = (e) => {
-    const synthType = e.target.value;
-    appState.set('synthType', synthType);
-    
-    // Show/hide appropriate synthesis controls
-    const zingControls = document.querySelectorAll(".zing-control");
-    const formantControls = document.querySelector(".formant-controls");
-    
-    if (synthType === "zing") {
-        zingControls.forEach(el => el.style.display = "block");
-        formantControls.style.display = "none";
-    } else if (synthType === "formant") {
-        zingControls.forEach(el => el.style.display = "none");
-        formantControls.style.display = "block";
-    } else {
-        // Sine - hide both advanced synthesis controls
-        zingControls.forEach(el => el.style.display = "none");
-        formantControls.style.display = "none";
-    }
-};
+// Vowel synthesis is now always active - no type switching needed
 
 // Subdivision is now handled by the value control system via handleValueChange
 
@@ -1016,7 +995,6 @@ setupValueControls(handleValueChange);
 
 // Initialize mode display
 document.getElementById("synthMode").dispatchEvent(new Event("change"));
-document.getElementById("synthType").dispatchEvent(new Event("change"));
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {

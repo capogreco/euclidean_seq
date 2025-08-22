@@ -30,10 +30,8 @@ export class AppState {
             vowelX: 0.5, // Front/back position (0=back, 1=front)
             vowelY: 0.5, // Close/open position (0=close, 1=open)
             phonemeSteps: 5, // Length of phoneme sequence (independent of note sequence)
-            synthType: 'zing', // Synthesis type: zing, formant, sine
+            synthBlend: 0.5, // Unified vowel synth blend (0=formant, 1=zing)
             morph: 0, // Morphing Zing morph parameter (-1 to 1)
-            harmonicRatio: 2, // Harmonic ratio for Morphing Zing
-            modDepth: 0.5, // Modulation depth for AM modes
             symmetry: 0.5, // Waveform symmetry control
         };
 

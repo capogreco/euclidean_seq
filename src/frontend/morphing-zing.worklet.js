@@ -11,7 +11,11 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             { name: 'modDepth', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
             { name: 'symmetry', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
             { name: 'gain', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
-            { name: 'sync', defaultValue: 1, minValue: 0, maxValue: 1, automationRate: 'k-rate' }
+            { name: 'sync', defaultValue: 1, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+            // Vowel formant control parameters
+            { name: 'vowelX', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
+            { name: 'vowelY', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
+            { name: 'vowelBlend', defaultValue: 0.0, minValue: 0, maxValue: 1, automationRate: 'a-rate' } // 0=original zing, 1=vowel mode
         ];
     }
 
@@ -26,6 +30,17 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
         // Constants for performance
         this.twoPi = 2 * Math.PI;
         this.halfPi = Math.PI / 2;
+        
+        // Vowel formant table (F1, F2, F3 in Hz) - copied from formant synth
+        this.vowelCorners = {
+            backClose: [240, 596, 2400],   // 'u' - back, close
+            backOpen: [730, 1090, 2440],   // 'ɔ' - back, open  
+            frontClose: [270, 2290, 3010], // 'i' - front, close
+            frontOpen: [850, 1610, 2850]   // 'æ' - front, open
+        };
+        
+        // Current vowel formant frequencies (will be calculated)
+        this.formantFreqs = [800, 1150, 2900]; // Default to neutral vowel
         
         // Performance optimization: pre-allocated buffers
         this.phaseBuffer = new Float32Array(128);
@@ -51,6 +66,14 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
         const gain = this.expandParameter(parameters.gain, bufferSize);
         const sync = parameters.sync[0]; // k-rate parameter
         
+        // New vowel parameters
+        const vowelX = this.expandParameter(parameters.vowelX, bufferSize);
+        const vowelY = this.expandParameter(parameters.vowelY, bufferSize);
+        const vowelBlend = this.expandParameter(parameters.vowelBlend, bufferSize);
+        
+        // Update vowel formant frequencies (use first sample for k-rate calculation)
+        this.updateVowelFormants(vowelX[0], vowelY[0]);
+        
         for (let i = 0; i < bufferSize; i++) {
             // UPHO: Update master phase for phase coherence
             const phaseIncrement = freq[i] / this.sampleRate;
@@ -59,7 +82,6 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             // Hard sync detection (Zing synthesis core feature)
             let syncTrigger = false;
             if (sync > 0.5) {
-                // Detect master phase wrap (equivalent to analog zero-crossing)
                 if (this.masterPhase >= 1.0 && this.lastMasterPhase < 1.0) {
                     syncTrigger = true;
                 }
@@ -69,67 +91,147 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             // Keep master phase in [0, 1) range
             const fundamentalPhase = this.masterPhase % 1.0;
             
-            // Le Brun's Cross-Fade Solution: Two UPHO harmonics with smooth interpolation
-            const safeHarmonicRatio = Math.min(harmonicRatio[i], Math.floor((this.sampleRate * 0.45) / freq[i]));
-            
-            // Determine the two integer harmonics to cross-fade between
-            const lowerHarmonic = Math.floor(safeHarmonicRatio);
-            const upperHarmonic = lowerHarmonic + 1;
-            const crossfadeAmount = safeHarmonicRatio - lowerHarmonic; // 0.0 to 1.0
-            
-            // UPHO: Phase-locked harmonic oscillators for both harmonics
-            let lowerHarmonicPhase = (this.masterPhase * lowerHarmonic) % 1.0;
-            let upperHarmonicPhase = (this.masterPhase * upperHarmonic) % 1.0;
-            
-            // Hard sync: Reset harmonic phases on fundamental zero-crossing
-            if (syncTrigger) {
-                lowerHarmonicPhase = 0;
-                upperHarmonicPhase = 0;
-            }
-            
-            // Apply symmetry control to all oscillators
+            // Generate fundamental oscillator
             const shapedFundPhase = this.applySymmetry(fundamentalPhase, symmetry[i]);
-            const shapedLowerPhase = this.applySymmetry(lowerHarmonicPhase, symmetry[i]);
-            const shapedUpperPhase = this.applySymmetry(upperHarmonicPhase, symmetry[i]);
-            
-            // Generate fundamental and both harmonic waveforms
             const fundamental = this.generateWaveform(shapedFundPhase, phaseIncrement);
-            const lowerHarmonic_waveform = this.generateWaveform(shapedLowerPhase, phaseIncrement * lowerHarmonic);
-            const upperHarmonic_waveform = this.generateWaveform(shapedUpperPhase, phaseIncrement * upperHarmonic);
             
-            // Le Brun Cross-Fade: Interpolate between the two harmonics
-            const harmonic = lowerHarmonic_waveform * (1.0 - crossfadeAmount) + 
-                           upperHarmonic_waveform * crossfadeAmount;
+            // Blend between original Zing and vowel-based Zing
+            const blend = vowelBlend[i];
+            let outputSample = 0;
             
-            // Morphing Zing Synthesis: Bipolar interpolation between synthesis modes
-            const morphValue = morph[i];
-            let outputSample;
-            
-            if (Math.abs(morphValue) < 0.001) {
-                // Pure ring modulation (Zing synthesis center position)
-                outputSample = fundamental * harmonic;
-            } else if (morphValue > 0) {
-                // Morph towards AM with fundamental as modulator
-                const ringWeight = Math.cos(morphValue * this.halfPi);
-                const amWeight = Math.sin(morphValue * this.halfPi);
-                const ring = fundamental * harmonic;
-                const am = (1 + fundamental * modDepth[i]) * harmonic;
-                outputSample = ring * ringWeight + am * amWeight;
+            if (blend < 0.001) {
+                // Original Zing synthesis: single UPL pair with harmonic ratio
+                const safeHarmonicRatio = Math.min(harmonicRatio[i], Math.floor((this.sampleRate * 0.45) / freq[i]));
+                const harmonic = this.generateUPLHarmonic(safeHarmonicRatio, syncTrigger, symmetry[i]);
+                outputSample = this.applyMorphingSynthesis(fundamental, harmonic, morph[i], modDepth[i]);
+                
             } else {
-                // Morph towards AM with harmonic as modulator
-                const absMorph = Math.abs(morphValue);
-                const ringWeight = Math.cos(absMorph * this.halfPi);
-                const amWeight = Math.sin(absMorph * this.halfPi);
-                const ring = fundamental * harmonic;
-                const am = fundamental * (1 + harmonic * modDepth[i]);
-                outputSample = ring * ringWeight + am * amWeight;
+                // Vowel-based Zing synthesis: three UPL pairs for F1, F2, F3
+                const f1Harmonic = this.generateFormantUPL(0, freq[i], syncTrigger, symmetry[i]);
+                const f2Harmonic = this.generateFormantUPL(1, freq[i], syncTrigger, symmetry[i]);
+                const f3Harmonic = this.generateFormantUPL(2, freq[i], syncTrigger, symmetry[i]);
+                
+                // Ring modulate fundamental with each formant harmonic
+                const f1Ring = this.applyMorphingSynthesis(fundamental, f1Harmonic, morph[i], modDepth[i]);
+                const f2Ring = this.applyMorphingSynthesis(fundamental, f2Harmonic, morph[i], modDepth[i]);
+                const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morph[i], modDepth[i]);
+                
+                // Mix the three formant rings with appropriate amplitudes
+                const vowelRing = f1Ring * 0.5 + f2Ring * 0.3 + f3Ring * 0.2;
+                
+                if (blend < 0.999) {
+                    // Crossfade between original and vowel modes
+                    const originalHarmonic = this.generateUPLHarmonic(harmonicRatio[i], syncTrigger, symmetry[i]);
+                    const originalRing = this.applyMorphingSynthesis(fundamental, originalHarmonic, morph[i], modDepth[i]);
+                    outputSample = originalRing * (1.0 - blend) + vowelRing * blend;
+                } else {
+                    outputSample = vowelRing;
+                }
             }
             
             // Apply gain and write to output
-            output[i] = outputSample * gain[i] * 0.5; // Scale to prevent clipping
+            output[i] = outputSample * gain[i] * 0.5;
         }
         
         return true;
+    }
+    
+    // Update vowel formant frequencies based on vowel position
+    updateVowelFormants(vowelX, vowelY) {
+        const corners = this.vowelCorners;
+        
+        for (let f = 0; f < 3; f++) { // F1, F2, F3
+            // Bilinear interpolation between the four vowel corners
+            const backInterp = corners.backClose[f] * (1 - vowelY) + corners.backOpen[f] * vowelY;
+            const frontInterp = corners.frontClose[f] * (1 - vowelY) + corners.frontOpen[f] * vowelY;
+            const finalFreq = backInterp * (1 - vowelX) + frontInterp * vowelX;
+            
+            this.formantFreqs[f] = finalFreq;
+        }
+    }
+    
+    // Generate UPL harmonic for original Zing synthesis
+    generateUPLHarmonic(harmonicRatio, syncTrigger, symmetryValue) {
+        const lowerHarmonic = Math.floor(harmonicRatio);
+        const upperHarmonic = lowerHarmonic + 1;
+        const crossfadeAmount = harmonicRatio - lowerHarmonic;
+        
+        // UPHO: Phase-locked harmonic oscillators
+        let lowerPhase = (this.masterPhase * lowerHarmonic) % 1.0;
+        let upperPhase = (this.masterPhase * upperHarmonic) % 1.0;
+        
+        // Hard sync: Reset phases on fundamental zero-crossing
+        if (syncTrigger) {
+            lowerPhase = 0;
+            upperPhase = 0;
+        }
+        
+        // Apply symmetry and generate waveforms
+        const shapedLowerPhase = this.applySymmetry(lowerPhase, symmetryValue);
+        const shapedUpperPhase = this.applySymmetry(upperPhase, symmetryValue);
+        
+        const lowerWave = this.generateWaveform(shapedLowerPhase, 0);
+        const upperWave = this.generateWaveform(shapedUpperPhase, 0);
+        
+        // UPL cross-fade
+        return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
+    }
+    
+    // Generate UPL harmonic for specific formant (F1, F2, or F3)
+    generateFormantUPL(formantIndex, fundamentalFreq, syncTrigger, symmetryValue) {
+        const targetFreq = this.formantFreqs[formantIndex];
+        const targetRatio = targetFreq / fundamentalFreq;
+        
+        // Anti-aliasing: limit to Nyquist
+        const maxRatio = Math.floor((this.sampleRate * 0.45) / fundamentalFreq);
+        const safeRatio = Math.min(targetRatio, maxRatio);
+        
+        const lowerHarmonic = Math.floor(safeRatio);
+        const upperHarmonic = lowerHarmonic + 1;
+        const crossfadeAmount = safeRatio - lowerHarmonic;
+        
+        // UPHO: Phase-locked formant harmonics
+        let lowerPhase = (this.masterPhase * lowerHarmonic) % 1.0;
+        let upperPhase = (this.masterPhase * upperHarmonic) % 1.0;
+        
+        // Hard sync
+        if (syncTrigger) {
+            lowerPhase = 0;
+            upperPhase = 0;
+        }
+        
+        // Apply symmetry and generate
+        const shapedLowerPhase = this.applySymmetry(lowerPhase, symmetryValue);
+        const shapedUpperPhase = this.applySymmetry(upperPhase, symmetryValue);
+        
+        const lowerWave = this.generateWaveform(shapedLowerPhase, 0);
+        const upperWave = this.generateWaveform(shapedUpperPhase, 0);
+        
+        // UPL cross-fade
+        return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
+    }
+    
+    // Apply Morphing Zing synthesis (ring mod + AM morphing)
+    applyMorphingSynthesis(fundamental, harmonic, morphValue, modDepthValue) {
+        if (Math.abs(morphValue) < 0.001) {
+            // Pure ring modulation
+            return fundamental * harmonic;
+        } else if (morphValue > 0) {
+            // Morph towards AM with fundamental as modulator
+            const ringWeight = Math.cos(morphValue * this.halfPi);
+            const amWeight = Math.sin(morphValue * this.halfPi);
+            const ring = fundamental * harmonic;
+            const am = (1 + fundamental * modDepthValue) * harmonic;
+            return ring * ringWeight + am * amWeight;
+        } else {
+            // Morph towards AM with harmonic as modulator
+            const absMorph = Math.abs(morphValue);
+            const ringWeight = Math.cos(absMorph * this.halfPi);
+            const amWeight = Math.sin(absMorph * this.halfPi);
+            const ring = fundamental * harmonic;
+            const am = fundamental * (1 + harmonic * modDepthValue);
+            return ring * ringWeight + am * amWeight;
+        }
     }
     
     // Expand parameter to buffer size if it's a single value

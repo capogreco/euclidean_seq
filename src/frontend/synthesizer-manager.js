@@ -13,6 +13,7 @@ let currentSynthType = null;
 
 // Worklet initialization status
 let workletStatus = {
+    'vowel-synth': false,
     'morphing-zing': false,
     'formant-synth-processor': false
 };
@@ -24,18 +25,24 @@ export async function initializeSynthesizers() {
     try {
         console.log('🎵 Initializing synthesizer worklets...');
         
-        // Load Morphing Zing worklet
+        // Load new unified Vowel Synth worklet
+        if (!workletStatus['vowel-synth']) {
+            await audioContext.audioWorklet.addModule('src/frontend/vowel-synth.worklet.js');
+            workletStatus['vowel-synth'] = true;
+            console.log('✅ Vowel Synth worklet loaded');
+        }
+        
+        // Keep legacy worklets for fallback (optional)
         if (!workletStatus['morphing-zing']) {
             await audioContext.audioWorklet.addModule('src/frontend/morphing-zing.worklet.js');
             workletStatus['morphing-zing'] = true;
-            console.log('✅ Morphing Zing worklet loaded');
+            console.log('✅ Morphing Zing worklet loaded (legacy)');
         }
         
-        // Load Formant Synth worklet  
         if (!workletStatus['formant-synth-processor']) {
             await audioContext.audioWorklet.addModule('/src/frontend/formant-synth.worklet.js');
             workletStatus['formant-synth-processor'] = true;
-            console.log('✅ Formant Synth worklet loaded');
+            console.log('✅ Formant Synth worklet loaded (legacy)');
         }
         
         console.log('✅ All synthesizer worklets initialized');
@@ -47,10 +54,76 @@ export async function initializeSynthesizers() {
 }
 
 /**
- * Create a Morphing Zing synthesizer
+ * Create unified Vowel synthesizer (combines formant + zing)
+ */
+function createVowelSynthesizer(frequency, params = {}) {
+    const { 
+        vowelX = 0.5,
+        vowelY = 0.5,
+        synthBlend = 0.5, // 0=formant, 1=zing
+        morph = 0,
+        symmetry = 0.5
+    } = params;
+    
+    const vowelNode = new AudioWorkletNode(audioContext, 'vowel-synth');
+    vowelNode.connect(audioContext.destination);
+    
+    // Set initial parameters
+    const now = audioContext.currentTime;
+    vowelNode.parameters.get('frequency').setValueAtTime(frequency, now);
+    vowelNode.parameters.get('vowelX').setValueAtTime(vowelX, now);
+    vowelNode.parameters.get('vowelY').setValueAtTime(vowelY, now);
+    vowelNode.parameters.get('synthBlend').setValueAtTime(synthBlend, now);
+    vowelNode.parameters.get('morph').setValueAtTime(morph, now);
+    vowelNode.parameters.get('symmetry').setValueAtTime(symmetry, now);
+    vowelNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
+    vowelNode.parameters.get('gain').setValueAtTime(0.5, now);
+    
+    return {
+        type: 'vowel',
+        node: vowelNode,
+        start() {
+            vowelNode.parameters.get('active').setValueAtTime(1, audioContext.currentTime);
+        },
+        stop() {
+            vowelNode.parameters.get('active').setValueAtTime(0, audioContext.currentTime);
+        },
+        setFrequency(freq) {
+            vowelNode.parameters.get('frequency').setValueAtTime(freq, audioContext.currentTime);
+        },
+        setParams(newParams) {
+            const now = audioContext.currentTime;
+            if (newParams.vowelX !== undefined) vowelNode.parameters.get('vowelX').setValueAtTime(newParams.vowelX, now);
+            if (newParams.vowelY !== undefined) vowelNode.parameters.get('vowelY').setValueAtTime(newParams.vowelY, now);
+            if (newParams.synthBlend !== undefined) vowelNode.parameters.get('synthBlend').setValueAtTime(newParams.synthBlend, now);
+            if (newParams.morph !== undefined) vowelNode.parameters.get('morph').setValueAtTime(newParams.morph, now);
+            if (newParams.symmetry !== undefined) vowelNode.parameters.get('symmetry').setValueAtTime(newParams.symmetry, now);
+            if (newParams.gain !== undefined) vowelNode.parameters.get('gain').setValueAtTime(newParams.gain, now);
+        },
+        setVowel(x, y) {
+            const now = audioContext.currentTime;
+            vowelNode.parameters.get('vowelX').setValueAtTime(x, now);
+            vowelNode.parameters.get('vowelY').setValueAtTime(y, now);
+        },
+        disconnect() {
+            vowelNode.disconnect();
+        }
+    };
+}
+
+/**
+ * Create a Morphing Zing synthesizer (legacy)
  */
 function createZingSynthesizer(frequency, params = {}) {
-    const { morph = 0, harmonicRatio = 2, modDepth = 0.5, symmetry = 0.5 } = params;
+    const { 
+        morph = 0, 
+        harmonicRatio = 2, 
+        modDepth = 0.5, 
+        symmetry = 0.5,
+        vowelX = 0.5,
+        vowelY = 0.5,
+        vowelBlend = 0.0
+    } = params;
     
     const zingNode = new AudioWorkletNode(audioContext, 'morphing-zing');
     zingNode.connect(audioContext.destination);
@@ -62,6 +135,9 @@ function createZingSynthesizer(frequency, params = {}) {
     zingNode.parameters.get('harmonicRatio').setValueAtTime(harmonicRatio, now);
     zingNode.parameters.get('modDepth').setValueAtTime(modDepth, now);
     zingNode.parameters.get('symmetry').setValueAtTime(symmetry, now);
+    zingNode.parameters.get('vowelX').setValueAtTime(vowelX, now);
+    zingNode.parameters.get('vowelY').setValueAtTime(vowelY, now);
+    zingNode.parameters.get('vowelBlend').setValueAtTime(vowelBlend, now);
     zingNode.parameters.get('gain').setValueAtTime(0, now); // Start silent
     
     return {
@@ -83,6 +159,14 @@ function createZingSynthesizer(frequency, params = {}) {
             if (newParams.harmonicRatio !== undefined) zingNode.parameters.get('harmonicRatio').setValueAtTime(newParams.harmonicRatio, now);
             if (newParams.modDepth !== undefined) zingNode.parameters.get('modDepth').setValueAtTime(newParams.modDepth, now);
             if (newParams.symmetry !== undefined) zingNode.parameters.get('symmetry').setValueAtTime(newParams.symmetry, now);
+            if (newParams.vowelX !== undefined) zingNode.parameters.get('vowelX').setValueAtTime(newParams.vowelX, now);
+            if (newParams.vowelY !== undefined) zingNode.parameters.get('vowelY').setValueAtTime(newParams.vowelY, now);
+            if (newParams.vowelBlend !== undefined) zingNode.parameters.get('vowelBlend').setValueAtTime(newParams.vowelBlend, now);
+        },
+        setVowel(x, y) {
+            const now = audioContext.currentTime;
+            zingNode.parameters.get('vowelX').setValueAtTime(x, now);
+            zingNode.parameters.get('vowelY').setValueAtTime(y, now);
         },
         disconnect() {
             zingNode.disconnect();
@@ -186,6 +270,13 @@ export function switchToSynthesizer(synthType, frequency, params = {}) {
     // Create the requested synthesizer
     try {
         switch (synthType) {
+            case 'vowel':
+                if (!workletStatus['vowel-synth']) {
+                    throw new Error('Vowel Synth worklet not loaded');
+                }
+                currentSynthesizer = createVowelSynthesizer(frequency, params);
+                break;
+                
             case 'zing':
                 if (!workletStatus['morphing-zing']) {
                     throw new Error('Morphing Zing worklet not loaded');

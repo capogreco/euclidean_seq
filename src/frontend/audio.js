@@ -203,7 +203,7 @@ export function updateSynthVowel(appState, vowelPosition) {
     
     const { x: vowelX, y: vowelY } = vowelPosition;
     
-    // Update mono oscillator if active
+    // Update mono oscillator if active (works for both formant and zing synths)
     if (appState.playback.monoOsc && appState.playback.monoOsc.setVowel && typeof appState.playback.monoOsc.setVowel === 'function') {
         appState.playback.monoOsc.setVowel(vowelX, vowelY);
     }
@@ -368,19 +368,16 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
         const mode = document.getElementById("synthMode").value;
         if (mode === "mono") {
             const step0Freq = appState.playback.sequencePattern.steps[0] || 220;
-            const synthType = appState.params.synthType || 'sine';
+            const synthType = 'vowel'; // Always use unified vowel synthesizer
 
-            // Get synth-specific parameters
-            const synthParams = {};
-            if (synthType === 'zing') {
-                synthParams.morph = appState.params.morph || 0;
-                synthParams.harmonicRatio = appState.params.harmonicRatio || 2;
-                synthParams.modDepth = appState.params.modDepth || 0.5;
-                synthParams.symmetry = appState.params.symmetry || 0.5;
-            } else if (synthType === 'formant') {
-                synthParams.vowelX = appState.params.vowelX || 0.5;
-                synthParams.vowelY = appState.params.vowelY || 0.5;
-            }
+            // Get vowel synthesizer parameters
+            const synthParams = {
+                vowelX: appState.params.vowelX || 0.5,
+                vowelY: appState.params.vowelY || 0.5,
+                synthBlend: appState.params.synthBlend || 0.5,
+                morph: appState.params.morph || 0,
+                symmetry: appState.params.symmetry || 0.5
+            };
 
             // This single call replaces all the complex oscillator creation logic
             const monoOscillator = switchToSynthesizer(synthType, step0Freq, synthParams);
