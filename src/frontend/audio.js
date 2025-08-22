@@ -382,6 +382,11 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
             // This single call replaces all the complex oscillator creation logic
             const monoOscillator = switchToSynthesizer(synthType, step0Freq, synthParams);
             
+            // Auto-reconnect oscilloscope when synthesizer changes
+            if (window.reconnectOscilloscopeIfNeeded) {
+                window.reconnectOscilloscopeIfNeeded();
+            }
+            
             if (monoOscillator) {
                 monoOscillator.start();
                 appState.playback.monoOsc = monoOscillator;

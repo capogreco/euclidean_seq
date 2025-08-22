@@ -198,7 +198,7 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
   /**
    * Generate carrier signal for given harmonic with FM
    */
-  generateCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator) {
+  generateCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, useCosine = false) {
     if (amplitude <= 0 || harmonicNum <= 0) return 0;
     
     // UPHO: Carrier phase derived from shared master phasor
@@ -208,7 +208,8 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
     const carrierPhase = 2 * Math.PI * carrierPhasor;
     const modulatedPhase = carrierPhase + modulationIndex * modulator;
     
-    return amplitude * Math.sin(modulatedPhase);
+    // Use cosine for F2, sine for F1 and F3
+    return amplitude * (useCosine ? Math.cos(modulatedPhase) : Math.sin(modulatedPhase));
   }
   
   process(inputs, outputs, parameters) {
@@ -216,6 +217,8 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
     if (!output || output.length === 0) return true;
     
     const outputChannel = output[0];
+    const f1Channel = output.length > 1 ? output[1] : null;
+    const f2Channel = output.length > 2 ? output[2] : null;
     const blockSize = outputChannel.length;
     
     // Read AudioParam values (k-rate - single value per block)
@@ -254,17 +257,20 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
       // Generate shared modulator signal
       const modulator = this.generateModulator(this.masterPhasor);
       
-      // Sum all formant outputs
+      // Sum all formant outputs and store individual formants
       let totalOutput = 0;
+      let f1Output = 0;
+      let f2Output = 0;
       
-      this.formants.forEach(formant => {
+      this.formants.forEach((formant, formantIndex) => {
         // Generate both cross-faded carriers for this formant
         const evenCarrier = this.generateCarrier(
           this.masterPhasor,
           formant.carrierEven.harmonicNum,
           formant.carrierEven.amplitude,
           formant.bandwidth / 100.0, // Scale bandwidth to reasonable modulation index
-          modulator
+          modulator,
+          formantIndex === 1 // Use cosine for F2 (index 1)
         );
         
         const oddCarrier = this.generateCarrier(
@@ -272,15 +278,25 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
           formant.carrierOdd.harmonicNum,
           formant.carrierOdd.amplitude,
           formant.bandwidth / 100.0,
-          modulator
+          modulator,
+          formantIndex === 1 // Use cosine for F2 (index 1)
         );
         
         // Sum the cross-faded carriers for this formant
-        totalOutput += evenCarrier + oddCarrier;
+        const formantOutput = evenCarrier + oddCarrier;
+        totalOutput += formantOutput;
+        
+        // Store individual formant outputs for visualization
+        if (formantIndex === 0) f1Output = formantOutput;
+        if (formantIndex === 1) f2Output = formantOutput;
       });
       
       // Apply overall gain and output
       outputChannel[sample] = totalOutput * 0.1; // Scale to prevent clipping
+      
+      // Output individual formants for visualization if channels available
+      if (f1Channel) f1Channel[sample] = f1Output * 0.1;
+      if (f2Channel) f2Channel[sample] = f2Output * 0.1;
     }
     
     return true;

@@ -19,6 +19,21 @@
             <div class="sequence-visualization">
                 <!-- Sequence visualization will go here -->
             </div>
+            <div class="oscilloscope-section">
+                <h3>FORMANT OSCILLOSCOPE</h3>
+                <canvas id="xyOscilloscope"></canvas>
+                <div class="oscilloscope-controls">
+                    <button id="toggleOscilloscope" class="play-button">● Start Scope</button>
+                    <label>
+                        <input type="range" id="scopeGain" min="1" max="10" value="3" step="0.5">
+                        Gain
+                    </label>
+                    <label>
+                        <input type="range" id="scopeSamples" min="16" max="128" value="64" step="8">
+                        Samples/Frame
+                    </label>
+                </div>
+            </div>
             <div class="sequence-controls">
                 <div class="sequence-control-group">
                     <h3>Tempo</h3>

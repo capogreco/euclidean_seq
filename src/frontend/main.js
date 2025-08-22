@@ -8,12 +8,14 @@ import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updat
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerBpm, updateSchedulerSubdivision, updateSchedulerPatterns } from './audio-worklet-service.js';
 import { setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
 import { initializeSynthesizers, getCurrentSynthesizer } from './synthesizer-manager.js';
+import { XYOscilloscope } from './xy-oscilloscope.js';
 
 // Pattern utility functions are now imported from euclidean.js
 
 // Global instances
 const appState = new AppState();
 const pipeline = new TonePipeline();
+let oscilloscope = null;
 
 // Make globally available for compatibility
 window.appState = appState;
@@ -909,6 +911,9 @@ async function initializeApp() {
     await initializeAudioWorklet();
     await initializeSynthesizers();
     
+    // Initialize oscilloscope
+    initializeOscilloscope();
+    
     // Set up worklet message handling
     const schedulerNode = getSchedulerNode();
     if (schedulerNode) {
@@ -995,6 +1000,64 @@ setupValueControls(handleValueChange);
 
 // Initialize mode display
 document.getElementById("synthMode").dispatchEvent(new Event("change"));
+
+// Initialize oscilloscope controls
+function initializeOscilloscope() {
+    oscilloscope = new XYOscilloscope('xyOscilloscope');
+    
+    const toggleButton = document.getElementById('toggleOscilloscope');
+    const gainSlider = document.getElementById('scopeGain');
+    
+    toggleButton.addEventListener('click', () => {
+        const currentSynth = getCurrentSynthesizer();
+        if (!currentSynth) {
+            alert('No synthesizer active. Start playing a sequence first.');
+            return;
+        }
+        
+        if (!oscilloscope.isRunning) {
+            if (oscilloscope.connectToSynthesizer(currentSynth.node)) {
+                oscilloscope.start();
+                toggleButton.textContent = '⏸ Stop Scope';
+                toggleButton.style.background = '#ff4444';
+            } else {
+                alert('Failed to connect oscilloscope to synthesizer');
+            }
+        } else {
+            oscilloscope.stop();
+            toggleButton.textContent = '● Start Scope';
+            toggleButton.style.background = '';
+        }
+    });
+    
+    gainSlider.addEventListener('input', (e) => {
+        const gain = parseFloat(e.target.value);
+        if (oscilloscope) {
+            oscilloscope.setGain(gain);
+        }
+    });
+    
+    const samplesSlider = document.getElementById('scopeSamples');
+    samplesSlider.addEventListener('input', (e) => {
+        const samples = parseInt(e.target.value);
+        if (oscilloscope) {
+            oscilloscope.setSamplesPerFrame(samples);
+        }
+    });
+}
+
+// Auto-reconnect oscilloscope when synthesizer changes
+function reconnectOscilloscopeIfNeeded() {
+    if (oscilloscope && oscilloscope.isRunning) {
+        const currentSynth = getCurrentSynthesizer();
+        if (currentSynth) {
+            oscilloscope.connectToSynthesizer(currentSynth.node);
+        }
+    }
+}
+
+// Export for use in audio.js
+window.reconnectOscilloscopeIfNeeded = reconnectOscilloscopeIfNeeded;
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {

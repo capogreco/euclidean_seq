@@ -179,15 +179,18 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
      */
     generateFormantSynthesis(phasor, modulator) {
         let totalOutput = 0;
+        let f1Output = 0;
+        let f2Output = 0;
         
-        this.formants.forEach(formant => {
+        this.formants.forEach((formant, formantIndex) => {
             // Generate both cross-faded carriers for this formant
             const evenCarrier = this.generateFMCarrier(
                 phasor,
                 formant.carrierEven.harmonicNum,
                 formant.carrierEven.amplitude,
                 formant.bandwidth / 100.0,
-                modulator
+                modulator,
+                formantIndex === 1 // Use cosine for F2 (index 1)
             );
             
             const oddCarrier = this.generateFMCarrier(
@@ -195,19 +198,29 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
                 formant.carrierOdd.harmonicNum,
                 formant.carrierOdd.amplitude,
                 formant.bandwidth / 100.0,
-                modulator
+                modulator,
+                formantIndex === 1 // Use cosine for F2 (index 1)
             );
             
-            totalOutput += evenCarrier + oddCarrier;
+            const formantOutput = evenCarrier + oddCarrier;
+            totalOutput += formantOutput;
+            
+            // Store individual formant outputs for visualization
+            if (formantIndex === 0) f1Output = formantOutput;
+            if (formantIndex === 1) f2Output = formantOutput;
         });
         
-        return totalOutput * 0.1; // Scale to prevent clipping
+        return {
+            total: totalOutput * 0.1, // Scale to prevent clipping
+            f1: f1Output * 0.1,
+            f2: f2Output * 0.1
+        };
     }
     
     /**
      * Generate FM carrier for formant synthesis
      */
-    generateFMCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator) {
+    generateFMCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, useCosine = false) {
         if (amplitude <= 0 || harmonicNum <= 0) return 0;
         
         // UPHO: Carrier phase derived from shared master phasor
@@ -215,7 +228,8 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const carrierPhase = this.twoPi * carrierPhasor;
         const modulatedPhase = carrierPhase + modulationIndex * modulator;
         
-        return amplitude * Math.sin(modulatedPhase);
+        // Use cosine for F2, sine for F1 and F3
+        return amplitude * (useCosine ? Math.cos(modulatedPhase) : Math.sin(modulatedPhase));
     }
     
     /**
@@ -235,7 +249,13 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morphValue, modDepthValue);
         
         // Mix the three formant rings with appropriate amplitudes
-        return f1Ring * 0.5 + f2Ring * 0.3 + f3Ring * 0.2;
+        const totalOutput = f1Ring * 0.5 + f2Ring * 0.3 + f3Ring * 0.2;
+        
+        return {
+            total: totalOutput,
+            f1: f1Ring,
+            f2: f2Ring
+        };
     }
     
     /**
@@ -257,12 +277,13 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         let lowerPhase = (this.masterPhase * lowerHarmonic) % 1.0;
         let upperPhase = (this.masterPhase * upperHarmonic) % 1.0;
         
-        // Apply symmetry and generate waveforms
+        // Apply symmetry and generate waveforms (use cosine for F2)
         const shapedLowerPhase = this.applySymmetry(lowerPhase, symmetryValue);
         const shapedUpperPhase = this.applySymmetry(upperPhase, symmetryValue);
+        const useCosine = formantIndex === 1; // F2 uses cosine
         
-        const lowerWave = this.generateWaveform(shapedLowerPhase);
-        const upperWave = this.generateWaveform(shapedUpperPhase);
+        const lowerWave = this.generateWaveform(shapedLowerPhase, useCosine);
+        const upperWave = this.generateWaveform(shapedUpperPhase, useCosine);
         
         // UPL cross-fade
         return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
@@ -310,8 +331,8 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     /**
      * Generate basic waveform (currently sine, can be extended)
      */
-    generateWaveform(phase) {
-        return Math.sin(this.twoPi * phase);
+    generateWaveform(phase, useCosine = false) {
+        return useCosine ? Math.cos(this.twoPi * phase) : Math.sin(this.twoPi * phase);
     }
     
     /**
@@ -326,6 +347,8 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         if (!output || output.length === 0) return true;
         
         const outputChannel = output[0];
+        const f1Channel = output.length > 1 ? output[1] : null;
+        const f2Channel = output.length > 2 ? output[2] : null;
         const blockSize = outputChannel.length;
         
         // Update sample rate from global scope if available
@@ -372,9 +395,9 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             // Generate shared modulator signal
             const modulator = this.generateModulator(this.masterPhase);
             
-            // Generate both synthesis paths
-            const formantOutput = this.generateFormantSynthesis(this.masterPhase, modulator);
-            const zingOutput = this.generateZingSynthesis(
+            // Generate both synthesis paths with individual formant tracking
+            const { total: formantOutput, f1: formantF1, f2: formantF2 } = this.generateFormantSynthesis(this.masterPhase, modulator);
+            const { total: zingOutput, f1: zingF1, f2: zingF2 } = this.generateZingSynthesis(
                 this.masterPhase, 
                 morph[sample], 
                 modDepth, 
@@ -384,9 +407,15 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             // Blend between synthesis paths
             const blend = synthBlend[sample];
             const blendedOutput = formantOutput * (1.0 - blend) + zingOutput * blend;
+            const blendedF1 = formantF1 * (1.0 - blend) + zingF1 * blend;
+            const blendedF2 = formantF2 * (1.0 - blend) + zingF2 * blend;
             
             // Apply gain and output
             outputChannel[sample] = blendedOutput * gain[sample];
+            
+            // Output individual formants for visualization if channels available
+            if (f1Channel) f1Channel[sample] = blendedF1 * gain[sample];
+            if (f2Channel) f2Channel[sample] = blendedF2 * gain[sample];
         }
         
         return true;

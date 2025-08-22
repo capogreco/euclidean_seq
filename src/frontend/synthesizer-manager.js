@@ -65,8 +65,10 @@ function createVowelSynthesizer(frequency, params = {}) {
         symmetry = 0.5
     } = params;
     
-    const vowelNode = new AudioWorkletNode(audioContext, 'vowel-synth');
-    vowelNode.connect(audioContext.destination);
+    const vowelNode = new AudioWorkletNode(audioContext, 'vowel-synth', {
+        outputChannelCount: [3] // Main mix + F1 + F2
+    });
+    vowelNode.connect(audioContext.destination, 0, 0); // Main output only
     
     // Set initial parameters
     const now = audioContext.currentTime;
@@ -125,8 +127,10 @@ function createZingSynthesizer(frequency, params = {}) {
         vowelBlend = 0.0
     } = params;
     
-    const zingNode = new AudioWorkletNode(audioContext, 'morphing-zing');
-    zingNode.connect(audioContext.destination);
+    const zingNode = new AudioWorkletNode(audioContext, 'morphing-zing', {
+        outputChannelCount: [3] // Main mix + F1 + F2
+    });
+    zingNode.connect(audioContext.destination, 0, 0); // Main output only
     
     // Set initial parameters
     const now = audioContext.currentTime;
@@ -180,8 +184,10 @@ function createZingSynthesizer(frequency, params = {}) {
 function createFormantSynthesizer(frequency, params = {}) {
     const { vowelX = 0.5, vowelY = 0.5 } = params;
     
-    const formantNode = new AudioWorkletNode(audioContext, 'formant-synth-processor');
-    formantNode.connect(audioContext.destination);
+    const formantNode = new AudioWorkletNode(audioContext, 'formant-synth-processor', {
+        outputChannelCount: [3] // Main mix + F1 + F2
+    });
+    formantNode.connect(audioContext.destination, 0, 0); // Main output only
     
     // Set initial parameters
     const now = audioContext.currentTime;

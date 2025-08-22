@@ -50,6 +50,8 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
 
     process(inputs, outputs, parameters) {
         const output = outputs[0][0];
+        const f1Channel = outputs[0].length > 1 ? outputs[0][1] : null;
+        const f2Channel = outputs[0].length > 2 ? outputs[0][2] : null;
         const bufferSize = output.length;
         
         // Update sample rate from global scope if available
@@ -99,11 +101,18 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             const blend = vowelBlend[i];
             let outputSample = 0;
             
+            let f1Output = 0;
+            let f2Output = 0;
+            
             if (blend < 0.001) {
                 // Original Zing synthesis: single UPL pair with harmonic ratio
                 const safeHarmonicRatio = Math.min(harmonicRatio[i], Math.floor((this.sampleRate * 0.45) / freq[i]));
                 const harmonic = this.generateUPLHarmonic(safeHarmonicRatio, syncTrigger, symmetry[i]);
                 outputSample = this.applyMorphingSynthesis(fundamental, harmonic, morph[i], modDepth[i]);
+                
+                // For non-vowel mode, output some reasonable signals for visualization
+                f1Output = fundamental * 0.5;
+                f2Output = harmonic * 0.5;
                 
             } else {
                 // Vowel-based Zing synthesis: three UPL pairs for F1, F2, F3
@@ -115,6 +124,10 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
                 const f1Ring = this.applyMorphingSynthesis(fundamental, f1Harmonic, morph[i], modDepth[i]);
                 const f2Ring = this.applyMorphingSynthesis(fundamental, f2Harmonic, morph[i], modDepth[i]);
                 const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morph[i], modDepth[i]);
+                
+                // Store individual formant outputs for visualization
+                f1Output = f1Ring;
+                f2Output = f2Ring;
                 
                 // Mix the three formant rings with appropriate amplitudes
                 const vowelRing = f1Ring * 0.5 + f2Ring * 0.3 + f3Ring * 0.2;
@@ -131,6 +144,10 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             
             // Apply gain and write to output
             output[i] = outputSample * gain[i] * 0.5;
+            
+            // Output individual formants for visualization if channels available
+            if (f1Channel) f1Channel[i] = f1Output * gain[i] * 0.5;
+            if (f2Channel) f2Channel[i] = f2Output * gain[i] * 0.5;
         }
         
         return true;
@@ -166,12 +183,13 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             upperPhase = 0;
         }
         
-        // Apply symmetry and generate waveforms
+        // Apply symmetry and generate waveforms (use cosine for F2)
         const shapedLowerPhase = this.applySymmetry(lowerPhase, symmetryValue);
         const shapedUpperPhase = this.applySymmetry(upperPhase, symmetryValue);
+        const useCosine = formantIndex === 1; // F2 uses cosine
         
-        const lowerWave = this.generateWaveform(shapedLowerPhase, 0);
-        const upperWave = this.generateWaveform(shapedUpperPhase, 0);
+        const lowerWave = this.generateWaveform(shapedLowerPhase, 0, useCosine);
+        const upperWave = this.generateWaveform(shapedUpperPhase, 0, useCosine);
         
         // UPL cross-fade
         return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
@@ -257,10 +275,10 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
     }
     
     // Generate waveform with basic PolyBLEP anti-aliasing
-    generateWaveform(phase, phaseIncrement) {
+    generateWaveform(phase, phaseIncrement, useCosine = false) {
         // For now, use sine waves - can be extended to support other waveforms
         // with full PolyBLEP anti-aliasing for sawtooth/square waves
-        return Math.sin(this.twoPi * phase);
+        return useCosine ? Math.cos(this.twoPi * phase) : Math.sin(this.twoPi * phase);
     }
     
     // PolyBLEP anti-aliasing correction (for future sawtooth/square implementation)
