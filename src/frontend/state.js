@@ -9,32 +9,30 @@ export class AppState {
             chordNotes: 4,
             chordRotation: 0,
             rootFreq: 261.63,
-            sequenceNotes: 8,
+            sequenceNotes: 5,
             sequenceMethod: "euclidean",
-            sequenceBase: 0,
-            sequenceOctaves: 2,
-            sequenceRotation: 0,
+            sequenceBase: -2,
+            sequenceOctaves: 3,
+            sequenceRotation: 1,
             bpm: 120,
             subdivision: 4, // Quarter notes
-            portamentoSteps: 4,
-            portamentoRotation: 0,
-            portamentoTime: 50, // Percentage of step length (0-100%)
+            portamentoSteps: 2,
+            portamentoRotation: 2,
+            portamentoTime: 35, // Percentage of step length (0-100%)
             rhythmPulses: 4,
             rhythmRotation: 0,
             patternSteps: 8,
             attackTime: 10,
             decayTime: 100,
-            synthMode: "mono",
-            sequenceOrder: "forward",
+            sequenceOrder: "shuffle",
             randomSeed: 12345, // For deterministic shuffle/random
             vowelX: 0.5, // Front/back position (0=back, 1=front)
             vowelY: 0.5, // Close/open position (0=close, 1=open)
-            phonemeSteps: 5, // Length of phoneme sequence (independent of note sequence)
-            synthBlend: 0.5, // Unified vowel synth blend (0=formant, 1=zing)
+            phonemeSteps: 4, // Length of phoneme sequence (independent of note sequence)
+            synthBlend: 0, // Unified vowel synth blend (0=formant, 1=zing)
             morph: 0, // Morphing Zing morph parameter (-1 to 1)
             symmetry: 0.5, // Waveform symmetry control
-            formantGain: 3.0, // Formant synthesis path gain compensation (empirically balanced)
-            zingGain: 0.4, // Zing synthesis path gain compensation (empirically balanced)
+            // formantGain and zingGain removed - synthesis paths are now internally balanced
             f1PhaseOffset: 0, // F1 phase offset in degrees (0-360)
             f2PhaseOffset: 90, // F2 phase offset in degrees (0-360, default 90° for cosine relationship)
             f3PhaseOffset: 180, // F3 phase offset in degrees (0-360)
@@ -159,8 +157,6 @@ export class AppState {
         });
 
         // Special cases - dropdown elements
-        const modeElement = document.getElementById("synthMode");
-        if (modeElement) this.params.synthMode = modeElement.value;
 
         const orderElement = document.getElementById("sequenceOrder");
         if (orderElement) this.params.sequenceOrder = orderElement.value;
@@ -182,7 +178,6 @@ export class AppState {
         });
 
         // Special cases - dropdown elements
-        document.getElementById("synthMode").value = this.params.synthMode;
         document.getElementById("sequenceOrder").value =
             this.params.sequenceOrder;
         document.getElementById("sequenceMethod").value =

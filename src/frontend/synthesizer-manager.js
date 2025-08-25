@@ -86,7 +86,7 @@ function createVowelSynthesizer(frequency, params = {}) {
     vowelNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
     vowelNode.parameters.get('gain').setValueAtTime(0.5, now);
     
-    // Set initial gain compensation (empirically balanced)
+    // Set initial gain compensation (empirically balanced, now handled internally)
     vowelNode.parameters.get('formantGain').setValueAtTime(3.0, now);
     vowelNode.parameters.get('zingGain').setValueAtTime(0.4, now);
     
@@ -114,8 +114,7 @@ function createVowelSynthesizer(frequency, params = {}) {
             if (newParams.morph !== undefined) vowelNode.parameters.get('morph').setValueAtTime(newParams.morph, now);
             if (newParams.symmetry !== undefined) vowelNode.parameters.get('symmetry').setValueAtTime(newParams.symmetry, now);
             if (newParams.gain !== undefined) vowelNode.parameters.get('gain').setValueAtTime(newParams.gain, now);
-            if (newParams.formantGain !== undefined) vowelNode.parameters.get('formantGain').setValueAtTime(newParams.formantGain, now);
-            if (newParams.zingGain !== undefined) vowelNode.parameters.get('zingGain').setValueAtTime(newParams.zingGain, now);
+            // formantGain and zingGain no longer exposed in UI - handled internally
             if (newParams.f1PhaseOffset !== undefined) vowelNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
             if (newParams.f2PhaseOffset !== undefined) vowelNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },

@@ -277,55 +277,6 @@ export function triggerMonoStep(appState, step, freq) {
     appState.playback.currentMonoFreq = freq;
 }
 
-export async function triggerPolyStep(appState, step, freq) {
-    const attackTime = appState.params.attackTime;
-    const decayTime = appState.params.decayTime;
-    const duration = attackTime + decayTime;
-    const synthType = appState.params.synthType || 'zing';
-    
-    // Use the selected synthesis mode for poly steps
-    if (synthType === 'zing') {
-        const morph = appState.params.morph || 0;
-        const harmonicRatio = appState.params.harmonicRatio || 2;
-        
-        if (await playMorphingZingNote(freq, duration, morph, harmonicRatio)) {
-            return; // Successfully used Morphing Zing synthesis
-        }
-    } else if (synthType === 'formant' && isFormantSynthReady()) {
-        // Use fallback vowel values for poly steps (current app state)
-        const vowelX = appState.params.vowelX || 0.5;
-        const vowelY = appState.params.vowelY || 0.5;
-        
-        if (playFormantNote(freq, duration, vowelX, vowelY)) {
-            return; // Successfully used formant synthesis
-        }
-    }
-    
-    // Fallback to sine wave synthesis
-    const osc = window.audioContext.createOscillator();
-    const gain = window.audioContext.createGain();
-
-    osc.connect(gain);
-    gain.connect(window.audioContext.destination);
-
-    osc.frequency.value = freq;
-    osc.type = "sine";
-
-    gain.gain.setValueAtTime(0, window.audioContext.currentTime);
-    gain.gain.linearRampToValueAtTime(
-        0.3,
-        window.audioContext.currentTime + attackTime / 1000,
-    );
-    gain.gain.exponentialRampToValueAtTime(
-        0.01,
-        window.audioContext.currentTime + (attackTime + decayTime) / 1000,
-    );
-
-    osc.start(window.audioContext.currentTime);
-    osc.stop(
-        window.audioContext.currentTime + (attackTime + decayTime) / 1000,
-    );
-}
 
 // Main sequence playback function using AudioWorklet scheduler
 import { switchToSynthesizer, stopCurrentSynthesizer } from './synthesizer-manager.js';
@@ -364,9 +315,9 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
             throw new Error("No sequence pattern generated.");
         }
 
-        // --- SIMPLE SYNTHESIZER SWITCHING ---
-        const mode = document.getElementById("synthMode").value;
-        if (mode === "mono") {
+        // --- SYNTHESIZER SWITCHING ---
+        // Always mono mode - create sustained oscillator for portamento
+        {
             const step0Freq = appState.playback.sequencePattern.steps[0] || 220;
             const synthType = 'vowel'; // Always use unified vowel synthesizer
 

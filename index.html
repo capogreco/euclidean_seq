@@ -10,7 +10,22 @@
     <body>
         <!-- Connection status removed - client-side only -->
 
-        <h1>Euclidean Tone Generator</h1>
+        <div class="oscilloscope-section">
+            <canvas id="xyOscilloscope"></canvas>
+            <div class="oscilloscope-controls">
+                <label>
+                    <input type="range" id="scopeGain" min="1" max="10" value="3" step="0.5">
+                    Gain <span id="scopeGainValue">3.0x</span>
+                </label>
+                <button
+                    class="play-button"
+                    id="playSequence"
+                    style="width: 100px; height: 40px; font-size: 16px"
+                >
+                    ▶ Play
+                </button>
+            </div>
+        </div>
 
         <div class="sequence-section">
             <div class="sequence-header">
@@ -18,16 +33,6 @@
             </div>
             <div class="sequence-visualization">
                 <!-- Sequence visualization will go here -->
-            </div>
-            <div class="oscilloscope-section">
-                <h3>FORMANT OSCILLOSCOPE</h3>
-                <canvas id="xyOscilloscope"></canvas>
-                <div class="oscilloscope-controls">
-                    <label>
-                        <input type="range" id="scopeGain" min="1" max="10" value="3" step="0.5">
-                        Gain <span id="scopeGainValue">3.0x</span>
-                    </label>
-                </div>
             </div>
             <div class="sequence-controls">
                 <div class="sequence-control-group">
@@ -72,13 +77,6 @@
 
                 <div class="sequence-control-group">
                     <h3>Pattern</h3>
-                    <div class="control">
-                        <label>Mode</label>
-                        <select id="synthMode" style="width: 100%">
-                            <option value="mono">Mono</option>
-                            <option value="poly">Poly</option>
-                        </select>
-                    </div>
                     <div class="control" id="patternStepsControl">
                         <label>Steps</label>
                         <div class="value-control">
@@ -130,68 +128,6 @@
                     </div>
                 </div>
 
-                <div
-                    class="sequence-control-group poly-only"
-                    style="display: none"
-                >
-                    <h3>Rhythm</h3>
-                    <div class="control">
-                        <label>Pulses</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="rhythmPulses"
-                                data-delta="-1"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="rhythmPulsesValue"
-                                data-min="1"
-                                data-max="16"
-                                data-default="8"
-                            >
-                                8
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="rhythmPulses"
-                                data-delta="1"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-                    <div class="control">
-                        <label>Rotation</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="rhythmRotation"
-                                data-delta="-1"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="rhythmRotationValue"
-                                data-min="0"
-                                data-max="15"
-                                data-default="0"
-                            >
-                                0
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="rhythmRotation"
-                                data-delta="1"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="sequence-control-group mono-only">
                     <h3>Portamento</h3>
@@ -210,9 +146,9 @@
                                 id="portamentoTimeValue"
                                 data-min="0"
                                 data-max="100"
-                                data-default="50"
+                                data-default="35"
                             >
-                                50
+                                35
                             </div>
                             <button
                                 class="value-btn"
@@ -238,9 +174,9 @@
                                 id="portamentoStepsValue"
                                 data-min="0"
                                 data-max="16"
-                                data-default="4"
+                                data-default="2"
                             >
-                                4
+                                2
                             </div>
                             <button
                                 class="value-btn"
@@ -266,9 +202,9 @@
                                 id="portamentoRotationValue"
                                 data-min="0"
                                 data-max="15"
-                                data-default="0"
+                                data-default="2"
                             >
-                                0
+                                2
                             </div>
                             <button
                                 class="value-btn"
@@ -281,135 +217,9 @@
                     </div>
                 </div>
 
-                <div
-                    class="sequence-control-group poly-only"
-                    style="display: none"
-                >
-                    <h3>Envelope</h3>
-                    <div class="control">
-                        <label>Attack (ms)</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="attackTime"
-                                data-delta="-5"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="attackTimeValue"
-                                data-min="0"
-                                data-max="100"
-                                data-default="5"
-                            >
-                                5
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="attackTime"
-                                data-delta="5"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-                    <div class="control">
-                        <label>Decay (ms)</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="decayTime"
-                                data-delta="-10"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="decayTimeValue"
-                                data-min="50"
-                                data-max="500"
-                                data-default="200"
-                            >
-                                200
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="decayTime"
-                                data-delta="10"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="sequence-control-group">
                     <h3>Vowel Synthesis</h3>
-                    <div class="control vowel-control">
-                        <label>Synth Blend</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="synthBlend"
-                                data-delta="-0.05"
-                                data-precision="2"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="synthBlendValue"
-                                data-min="0"
-                                data-max="1"
-                                data-default="0.5"
-                                data-precision="2"
-                            >
-                                0.50
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="synthBlend"
-                                data-delta="0.05"
-                                data-precision="2"
-                            >
-                                +
-                            </button>
-                        </div>
-                        <div class="blend-label">0=Formant, 1=Zing</div>
-                    </div>
-                    <div class="control vowel-control">
-                        <label>Morph (Zing Path)</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="morph"
-                                data-delta="-0.1"
-                                data-precision="1"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="morphValue"
-                                data-min="-1"
-                                data-max="1"
-                                data-default="0"
-                                data-precision="1"
-                            >
-                                0.0
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="morph"
-                                data-delta="0.1"
-                                data-precision="1"
-                            >
-                                +
-                            </button>
-                        </div>
-                        <div class="morph-label" id="morphLabel">Ring Modulation</div>
-                    </div>
                     <div class="control vowel-control">
                         <label>Symmetry</label>
                         <div class="value-control">
@@ -442,6 +252,74 @@
                         </div>
                     </div>
                     <div class="control vowel-control">
+                        <label>Synth Blend</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="synthBlend"
+                                data-delta="-0.05"
+                                data-precision="2"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="synthBlendValue"
+                                data-min="0"
+                                data-max="1"
+                                data-default="0"
+                                data-precision="2"
+                            >
+                                0.00
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="synthBlend"
+                                data-delta="0.05"
+                                data-precision="2"
+                            >
+                                +
+                            </button>
+                        </div>
+                        <div class="morph-label" id="synthBlendLabel">Formant</div>
+                    </div>
+                    <div class="control vowel-control">
+                        <label>Zing Morph</label>
+                        <div class="value-control">
+                            <button
+                                class="value-btn"
+                                data-target="morph"
+                                data-delta="-0.1"
+                                data-precision="1"
+                            >
+                                −
+                            </button>
+                            <div
+                                class="value-display"
+                                id="morphValue"
+                                data-min="-1"
+                                data-max="1"
+                                data-default="0"
+                                data-precision="1"
+                            >
+                                0.0
+                            </div>
+                            <button
+                                class="value-btn"
+                                data-target="morph"
+                                data-delta="0.1"
+                                data-precision="1"
+                            >
+                                +
+                            </button>
+                        </div>
+                        <div class="morph-label" id="morphLabel">Ring Modulation</div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Phoneme Sequence</h3>
+                    <div class="control">
                         <label>Phoneme Steps</label>
                         <div class="value-control">
                             <button
@@ -456,9 +334,9 @@
                                 id="phonemeStepsValue"
                                 data-min="1"
                                 data-max="32"
-                                data-default="5"
+                                data-default="4"
                             >
-                                5
+                                4
                             </div>
                             <button
                                 class="value-btn"
@@ -469,97 +347,16 @@
                             </button>
                         </div>
                     </div>
-                    <div class="control vowel-control">
-                        <label>Manual Vowel</label>
-                        <select id="vowelPreset" style="width: 100%">
-                            <option value="sequence">Use Sequence</option>
-                            <option value="a">/a/ (father)</option>
-                            <option value="e">/e/ (bet)</option>
-                            <option value="i">/i/ (beat)</option>
-                            <option value="o">/o/ (bought)</option>
-                            <option value="u">/u/ (boot)</option>
-                        </select>
-                    </div>
-                    <div class="control vowel-control">
+                    <div class="control">
                         <button
                             class="play-button"
                             id="regeneratePhonemes"
-                            style="background: #fff"
+                            style="background: #fff; width: 100%"
                         >
                             ↻ New Phonemes
                         </button>
                     </div>
-                    <div class="control vowel-control">
-                        <label>Formant Gain</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="formantGain"
-                                data-delta="-0.1"
-                                data-precision="1"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="formantGainValue"
-                                data-min="0.1"
-                                data-max="5.0"
-                                data-default="3.0"
-                                data-precision="1"
-                            >
-                                3.0
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="formantGain"
-                                data-delta="0.1"
-                                data-precision="1"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
-                    <div class="control vowel-control">
-                        <label>Zing Gain</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="zingGain"
-                                data-delta="-0.1"
-                                data-precision="1"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="zingGainValue"
-                                data-min="0.1"
-                                data-max="3.0"
-                                data-default="0.4"
-                                data-precision="1"
-                            >
-                                0.4
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="zingGain"
-                                data-delta="0.1"
-                                data-precision="1"
-                            >
-                                +
-                            </button>
-                        </div>
-                    </div>
                 </div>
-
-                <button
-                    class="play-button"
-                    id="playSequence"
-                    style="width: 100px; height: 40px; font-size: 16px"
-                >
-                    ▶ Play
-                </button>
             </div>
         </div>
 
@@ -771,9 +568,9 @@
                             id="sequenceBaseValue"
                             data-min="-2"
                             data-max="2"
-                            data-default="0"
+                            data-default="-2"
                         >
-                            0
+                            -2
                         </div>
                         <button
                             class="value-btn"
@@ -799,9 +596,9 @@
                             id="sequenceOctavesValue"
                             data-min="1"
                             data-max="4"
-                            data-default="2"
+                            data-default="3"
                         >
-                            2
+                            3
                         </div>
                         <button
                             class="value-btn"
@@ -827,9 +624,9 @@
                             id="sequenceNotesValue"
                             data-min="1"
                             data-max="6"
-                            data-default="6"
+                            data-default="5"
                         >
-                            6
+                            5
                         </div>
                         <button
                             class="value-btn"
@@ -844,7 +641,6 @@
                     <label>Method</label>
                     <select id="sequenceMethod" style="width: 100%">
                         <option value="euclidean">Euclidean</option>
-                        <option value="random">Random</option>
                     </select>
                 </div>
                 <div
@@ -866,9 +662,9 @@
                             id="sequenceRotationValue"
                             data-min="0"
                             data-max="7"
-                            data-default="0"
+                            data-default="1"
                         >
-                            0
+                            1
                         </div>
                         <button
                             class="value-btn"

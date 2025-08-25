@@ -3,7 +3,7 @@ import { AppState } from './state.js';
 import { TonePipeline } from './toneGenerator.js';
 import { generateToneData, orderTones } from './toneEngine.js';
 import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
-import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, triggerPolyStep, updateSynthVowel } from './audio.js';
+import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, updateSynthVowel } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerBpm, updateSchedulerSubdivision, updateSchedulerPatterns } from './audio-worklet-service.js';
 import { setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
@@ -24,21 +24,7 @@ window.updateSequenceVisualization = () => updateSequenceVisualization(appState)
 
 // Get vowel position for current step
 function getCurrentVowelPosition(step) {
-    const vowelPreset = document.getElementById("vowelPreset").value;
-    
-    // If using manual vowel setting, return that
-    if (vowelPreset !== "sequence") {
-        const vowelPositions = {
-            'a': { x: 0.8, y: 0.9 },  // /a/ - back, open
-            'e': { x: 0.7, y: 0.4 },  // /e/ - front-central, mid
-            'i': { x: 1.0, y: 0.1 },  // /i/ - front, close
-            'o': { x: 0.2, y: 0.4 },  // /o/ - back, mid
-            'u': { x: 0.0, y: 0.1 }   // /u/ - back, close
-        };
-        return vowelPositions[vowelPreset] || { x: 0.5, y: 0.5 };
-    }
-    
-    // Use phoneme sequence
+    // Always use phoneme sequence
     const phonemePattern = appState.playback.phonemePattern;
     if (!phonemePattern.positions || phonemePattern.positions.length === 0) {
         return { x: 0.5, y: 0.5 }; // Default vowel position
@@ -69,6 +55,21 @@ function updateMorphLabel(morphValue) {
     }
 }
 
+function updateSynthBlendLabel(blendValue) {
+    const label = document.getElementById('synthBlendLabel');
+    if (!label) return;
+    
+    if (blendValue === 0) {
+        label.textContent = 'Formant';
+    } else if (blendValue === 1) {
+        label.textContent = 'Zing';
+    } else {
+        const formantPercent = ((1 - blendValue) * 100).toFixed(0);
+        const zingPercent = (blendValue * 100).toFixed(0);
+        label.textContent = `${formantPercent}% Formant, ${zingPercent}% Zing`;
+    }
+}
+
 // Controller functions (moved from ui.js)
 function handleValueChange(display, value) {
     const target = display.id.replace('Value', '');
@@ -80,7 +81,7 @@ function handleValueChange(display, value) {
     handleControlChange(target, value);
 
     // Sync real-time parameters that don't need full tone regeneration
-    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'synthBlend', 'morph', 'symmetry', 'formantGain', 'zingGain'].includes(target)) {
+    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'synthBlend', 'morph', 'symmetry'].includes(target)) {
         appState.set(target, value);
         
         // Update formant synthesizer for vowel changes
@@ -88,13 +89,18 @@ function handleValueChange(display, value) {
             const vowelX = appState.params.vowelX;
             const vowelY = appState.params.vowelY;
             setVowelPosition(vowelX, vowelY);
-            
-            // Reset vowel preset to custom when manually adjusting
-            document.getElementById("vowelPreset").value = "custom";
         }
         
+        // Update dynamic labels
+        if (target === 'synthBlend') {
+            updateSynthBlendLabel(value);
+        }
+        if (target === 'morph') {
+            updateMorphLabel(value);
+        }
+
         // Update Vowel synthesizer parameters
-        if (['synthBlend', 'morph', 'symmetry', 'formantGain', 'zingGain'].includes(target)) {
+        if (['synthBlend', 'morph', 'symmetry'].includes(target)) {
             // Update current synthesizer parameters if it's a vowel synth
             const currentSynth = getCurrentSynthesizer();
             if (currentSynth && (currentSynth.type === 'vowel' || currentSynth.type === 'zing')) {
@@ -103,10 +109,6 @@ function handleValueChange(display, value) {
                 currentSynth.setParams(params);
             }
             
-            // Update morph label
-            if (target === 'morph') {
-                updateMorphLabel(value);
-            }
         }
         
         // Regenerate phoneme pattern when steps change
@@ -383,44 +385,26 @@ function generatePhonemePattern() {
     appState.playback.phonemePattern.positions = selectedPositions;
     appState.playback.phonemePattern.currentStep = 0;
     
-    // console.log(`🗣️ Generated phoneme pattern: [${selectedVowels.join(', ')}] (${phonemeSteps} steps - polyrhythmic with note sequence)`);
+    // console.log(`🗣️ Generated phoneme pattern: [${selectedVowels.join(', ')}] (${phonemeSteps} steps - independent sequence)`);
 }
 
 // Sequence generation functions
 function generateSequencePattern() {
-    const mode = document.getElementById("synthMode").value;
     const order = document.getElementById("sequenceOrder").value;
 
-    let patternSteps, rhythmPulses, rhythmRotation, portamentoSteps, portamentoRotation;
-
-    if (mode === "mono") {
-        // Mono mode: steps = number of sequence tones, no rhythm pattern
-        const activeToneCount = currentData.sequenceIndices
-            ? currentData.sequenceIndices.length
-            : 0;
-        patternSteps = activeToneCount;
-        rhythmPulses = patternSteps; // All steps active in mono
-        rhythmRotation = 0;
-        portamentoSteps = parseInt(
-            document.getElementById("portamentoStepsValue").textContent,
-        );
-        portamentoRotation = parseInt(
-            document.getElementById("portamentoRotationValue").textContent,
-        );
-    } else {
-        // Poly mode: use UI values
-        patternSteps = parseInt(
-            document.getElementById("patternStepsValue").textContent,
-        );
-        rhythmPulses = parseInt(
-            document.getElementById("rhythmPulsesValue").textContent,
-        );
-        rhythmRotation = parseInt(
-            document.getElementById("rhythmRotationValue").textContent,
-        );
-        portamentoSteps = 0; // No portamento in poly mode
-        portamentoRotation = 0;
-    }
+    // Steps = number of sequence tones, all steps active (no rhythm pattern)
+    const activeToneCount = currentData.sequenceIndices
+        ? currentData.sequenceIndices.length
+        : 0;
+    const patternSteps = activeToneCount;
+    const rhythmPulses = patternSteps; // All steps active
+    const rhythmRotation = 0;
+    const portamentoSteps = parseInt(
+        document.getElementById("portamentoStepsValue").textContent,
+    );
+    const portamentoRotation = parseInt(
+        document.getElementById("portamentoRotationValue").textContent,
+    );
 
     // --- Start of new code ---
     // Dynamically update the max value of the portamento rotation control
@@ -506,44 +490,27 @@ function generateSequencePattern() {
     const steps = [];
     let noteCounter = 0;
 
-    if (mode === "mono") {
-        // Mono: simple ordering of tones
-        let orderedTones = [...activeTones];
+    // Simple ordering of tones
+    let orderedTones = [...activeTones];
 
-        // Use pure ordering function with deterministic seed
-        const seed = appState.get('randomSeed') + appState.get('synthMode').charCodeAt(0);
-        orderedTones = orderTones(activeTones, order, seed);
+    // Use pure ordering function with deterministic seed
+    const seed = appState.get('randomSeed') + 'm'.charCodeAt(0); // 'mono'
+    orderedTones = orderTones(activeTones, order, seed);
 
-        // In mono, all steps have notes (no rests)
-        for (let i = 0; i < patternSteps; i++) {
-            steps.push(orderedTones[i % orderedTones.length]);
-        }
+    // All steps have notes (no rests)
+    for (let i = 0; i < patternSteps; i++) {
+        steps.push(orderedTones[i % orderedTones.length]);
+    }
 
-        // Update portamento steps max based on actual pattern steps
-        document.getElementById("portamentoStepsValue").dataset.max =
+    // Update portamento steps max based on actual pattern steps
+    document.getElementById("portamentoStepsValue").dataset.max =
+        patternSteps;
+    const currentPortamentoSteps = parseInt(
+        document.getElementById("portamentoStepsValue").textContent,
+    );
+    if (currentPortamentoSteps > patternSteps) {
+        document.getElementById("portamentoStepsValue").textContent =
             patternSteps;
-        const currentPortamentoSteps = parseInt(
-            document.getElementById("portamentoStepsValue").textContent,
-        );
-        if (currentPortamentoSteps > patternSteps) {
-            document.getElementById("portamentoStepsValue").textContent =
-                patternSteps;
-        }
-    } else {
-        // Poly mode: use pure ordering function with deterministic seed
-        const seed = appState.get('randomSeed') + appState.get('synthMode').charCodeAt(0);
-        const orderedTones = orderTones(activeTones, order, seed);
-
-        for (let i = 0; i < patternSteps; i++) {
-            if (rhythm[i]) {
-                // Use ordered tones cycling through the pattern
-                const noteIndex = noteCounter % orderedTones.length;
-                steps.push(orderedTones[noteIndex]);
-                noteCounter++;
-            } else {
-                steps.push(null); // Rest
-            }
-        }
     }
 
     // Write directly to single source of truth
@@ -559,7 +526,7 @@ function generateSequencePattern() {
     // Generate phoneme pattern (independent length)
     generatePhonemePattern();
     
-    // console.log(`🎵 PATTERN GENERATED: mode=${mode}, steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}], portamento=[${portamento.join(', ')}]`);
+    // console.log(`🎵 PATTERN GENERATED: steps=[${steps.map(s => s ? s.toFixed(1) : 'null').join(', ')}], rhythm=[${rhythm.join(', ')}], portamento=[${portamento.join(', ')}]`);
 }
 
 // Update only the portamento pattern without changing the note order
@@ -779,79 +746,7 @@ document.getElementById("sequenceOrder").onchange = (e) => {
     }
 };
 
-document.getElementById("synthMode").onchange = (e) => {
-    const mode = e.target.value;
 
-    // Show/hide appropriate controls
-    document.querySelectorAll(".mono-only").forEach((el) => {
-        el.style.display = mode === "mono" ? "block" : "none";
-    });
-    document.querySelectorAll(".poly-only").forEach((el) => {
-        el.style.display = mode === "poly" ? "block" : "none";
-    });
-
-    // Hide pattern steps for mono (automatic)
-    document.getElementById("patternStepsControl").style.display =
-        mode === "mono" ? "none" : "block";
-
-    // Stop any playing sequence and clean up mono oscillator
-    if (appState.playback.isPlaying) {
-        // Force stop the AudioWorklet
-        sendToScheduler('stop');
-        appState.playback.isPlaying = false;
-        
-        // Clean up mono oscillator if it exists
-        if (appState.playback.monoOsc) {
-            appState.playback.monoOsc.stop();
-            appState.playback.monoOsc = null;
-            appState.playback.monoGain = null;
-            appState.playback.currentMonoFreq = null;
-        }
-        
-        // Update UI
-        const button = document.getElementById("playSequence");
-        button.textContent = "▶ Play";
-        button.classList.remove("playing");
-    }
-    
-    // Always regenerate and update visualization when switching modes
-    generateTones();
-    generateSequencePattern();
-    updateSequenceVisualization(appState);
-};
-
-// Vowel preset selector handler
-document.getElementById("vowelPreset").onchange = (e) => {
-    const preset = e.target.value;
-    
-    // If "Use Sequence" is selected, no manual vowel override needed
-    if (preset === "sequence") {
-        // Just update the formant synth to use current sequence vowel if playing
-        return;
-    }
-    
-    // Vowel position mappings based on IPA vowel chart
-    const vowelPositions = {
-        'a': { x: 0.8, y: 0.9 },  // /a/ - back, open
-        'e': { x: 0.7, y: 0.4 },  // /e/ - front-central, mid
-        'i': { x: 1.0, y: 0.1 },  // /i/ - front, close
-        'o': { x: 0.2, y: 0.4 },  // /o/ - back, mid
-        'u': { x: 0.0, y: 0.1 }   // /u/ - back, close
-    };
-    
-    if (vowelPositions[preset]) {
-        const pos = vowelPositions[preset];
-        
-        // Update app state for manual vowel override
-        appState.set('vowelX', pos.x);
-        appState.set('vowelY', pos.y);
-        
-        // Update formant synth if active
-        if (isFormantSynthReady()) {
-            setVowelPosition(pos.x, pos.y);
-        }
-    }
-};
 
 // Vowel synthesis is now always active - no type switching needed
 
@@ -935,15 +830,8 @@ async function initializeApp() {
                 // Trigger note sequence step (no phoneme coupling)
                 const freq = appState.playback.sequencePattern.steps[payload.noteStep];
                 if (freq) {
-                    const mode = appState.params.synthMode;
-                    
                     // console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz`);
-                    
-                    if (mode === 'mono') {
-                        triggerMonoStep(appState, payload.noteStep, freq);
-                    } else {
-                        triggerPolyStep(appState, payload.noteStep, freq).catch(console.warn);
-                    }
+                    triggerMonoStep(appState, payload.noteStep, freq);
                 }
             }
             
@@ -998,8 +886,6 @@ async function initializeApp() {
 populateMidiDropdown();
 setupValueControls(handleValueChange);
 
-// Initialize mode display
-document.getElementById("synthMode").dispatchEvent(new Event("change"));
 
 // Initialize oscilloscope controls
 function initializeOscilloscope() {

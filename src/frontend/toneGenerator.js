@@ -101,7 +101,7 @@ export class TonePipeline {
 
             case "shuffle":
                 // Use mode-specific cache
-                const cacheKey = window.appState.get("synthMode") || "mono";
+                const cacheKey = "mono";
                 if (
                     !this.shuffleCache[cacheKey] ||
                     this.shuffleCache[cacheKey].length !== tones.length
@@ -348,16 +348,6 @@ export class TonePipeline {
                     selectedIndices.push(i);
                 }
             });
-        } else if (sequenceMethod === "random") {
-            const numToSelect = Math.min(sequenceNotes, expandedTones.length);
-            const available = [...Array(expandedTones.length).keys()];
-            
-            for (let i = 0; i < numToSelect; i++) {
-                const randomIndex = Math.floor(Math.random() * available.length);
-                selectedIndices.push(available[randomIndex]);
-                available.splice(randomIndex, 1);
-            }
-            selectedIndices.sort((a, b) => a - b);
         }
 
         // Return selected tones
