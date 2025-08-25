@@ -1006,11 +1006,16 @@ function initializeOscilloscope() {
     oscilloscope = new XYOscilloscope('xyOscilloscope', appState);
     
     const gainSlider = document.getElementById('scopeGain');
+    const gainDisplay = document.getElementById('scopeGainValue');
     
     gainSlider.addEventListener('input', (e) => {
         const gain = parseFloat(e.target.value);
         if (oscilloscope) {
             oscilloscope.setGain(gain);
+        }
+        // Update gain display
+        if (gainDisplay) {
+            gainDisplay.textContent = `${gain.toFixed(1)}x`;
         }
     });
     

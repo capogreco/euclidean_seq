@@ -318,14 +318,7 @@ class XYOscilloscope {
 
         // --- END of code to replace ---
         
-        // Debug output occasionally
-        if (Math.random() < 0.01) { // ~1% of frames
-            const rawX = this.dataArrayX.slice(0, 10);
-            const rawY = this.dataArrayY.slice(0, 10);
-            console.log('🔬 RAW X SAMPLES:', rawX.map(x => x.toFixed(4)).join(', '));
-            console.log('🔬 RAW Y SAMPLES:', rawY.map(y => y.toFixed(4)).join(', '));
-            console.log('🔬 AXES:', this.appState.get('scopeXAxis'), 'vs', this.appState.get('scopeYAxis'));
-        }
+        // Debug output removed for cleaner console
         
         this.draw();
         

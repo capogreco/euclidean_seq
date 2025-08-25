@@ -334,23 +334,37 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     
     /**
      * Apply Morphing Zing synthesis (ring mod + AM morphing)
+     * Simple amplitude scaling approach to prevent volume bulge
      */
     applyMorphingSynthesis(fundamental, harmonic, morphValue, modDepthValue) {
+        // AM compensation factor: reduce AM to match ring mod level
+        const amCompensation = 2.0 / 3.0; // Reduce AM by 33% to match ring mod
+        
         if (Math.abs(morphValue) < 0.001) {
             return fundamental * harmonic;
         } else if (morphValue > 0) {
             const ringWeight = Math.cos(morphValue * this.halfPi);
             const amWeight = Math.sin(morphValue * this.halfPi);
             const ring = fundamental * harmonic;
-            const am = (1 + fundamental * modDepthValue) * harmonic;
-            return ring * ringWeight + am * amWeight;
+            const am = (1 + fundamental * modDepthValue) * harmonic * amCompensation;
+            
+            // Simple scaling to prevent bulge: reduce overall level when both contribute
+            const totalWeight = ringWeight + amWeight;
+            const scaleFactor = 1.0 / Math.max(totalWeight, 1.0);
+            
+            return (ring * ringWeight + am * amWeight) * scaleFactor;
         } else {
             const absMorph = Math.abs(morphValue);
             const ringWeight = Math.cos(absMorph * this.halfPi);
             const amWeight = Math.sin(absMorph * this.halfPi);
             const ring = fundamental * harmonic;
-            const am = fundamental * (1 + harmonic * modDepthValue);
-            return ring * ringWeight + am * amWeight;
+            const am = fundamental * (1 + harmonic * modDepthValue) * amCompensation;
+            
+            // Simple scaling to prevent bulge: reduce overall level when both contribute
+            const totalWeight = ringWeight + amWeight;
+            const scaleFactor = 1.0 / Math.max(totalWeight, 1.0);
+            
+            return (ring * ringWeight + am * amWeight) * scaleFactor;
         }
     }
     
