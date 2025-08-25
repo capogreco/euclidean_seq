@@ -27,7 +27,16 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             { name: 'synthBlend', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' }, // 0=formant, 1=zing
             { name: 'morph', defaultValue: 0, minValue: -1, maxValue: 1, automationRate: 'a-rate' }, // Zing morph parameter
             { name: 'symmetry', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
-            { name: 'gain', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' }
+            { name: 'gain', defaultValue: 0.5, minValue: 0, maxValue: 1, automationRate: 'a-rate' },
+            
+            // Individual synthesis path gains for level matching (empirically balanced)
+            { name: 'formantGain', defaultValue: 3.0, minValue: 0.1, maxValue: 5.0, automationRate: 'k-rate' },
+            { name: 'zingGain', defaultValue: 0.4, minValue: 0.1, maxValue: 3.0, automationRate: 'k-rate' },
+            
+            // Phase offset parameters (in radians, 0 to 2π)
+            { name: 'f1PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' },
+            { name: 'f2PhaseOffset', defaultValue: 1.570796327, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }, // Default to 90° (π/2)
+            { name: 'f3PhaseOffset', defaultValue: 3.141592654, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }  // Default to 180° (π)
         ];
     }
 
@@ -44,16 +53,25 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         this.twoPi = 2 * Math.PI;
         this.halfPi = Math.PI / 2;
         
-        // Shared vowel formant table (F1, F2, F3 in Hz)
-        this.vowelCorners = {
+        // Shared vowel formant frequency table (F1, F2, F3 in Hz)
+        this.vowelFreqCorners = {
             backClose: [240, 596, 2400],   // 'u' - back, close
             backOpen: [730, 1090, 2440],   // 'ɔ' - back, open  
             frontClose: [270, 2290, 3010], // 'i' - front, close
             frontOpen: [850, 1610, 2850]   // 'æ' - front, open
         };
         
-        // Current interpolated formant frequencies
+        // Vowel-specific formant amplitude corners (F1, F2, F3 relative amplitudes)
+        this.vowelAmpCorners = {
+            backClose: [0.3, 0.2, 0.1],   // 'u' - low formants, weak F2/F3
+            backOpen: [1.0, 0.5, 0.2],    // 'ɔ' - strong F1, moderate F2
+            frontClose: [0.4, 1.0, 0.3],  // 'i' - strong F2, weak F1  
+            frontOpen: [0.8, 0.7, 0.3]    // 'æ' - strong F1 and F2
+        };
+        
+        // Current interpolated formant frequencies and amplitudes
         this.formantFreqs = [800, 1150, 2900]; // Default to neutral vowel
+        this.formantAmps = [0.6, 0.6, 0.25];   // Default amplitudes
         
         // Formant synthesis parameters (copied from formant synth)
         this.formants = [
@@ -99,19 +117,29 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     
     /**
      * Update vowel formants based on morphing position
-     * Shared by both synthesis paths
+     * Interpolates both frequencies and amplitudes for authentic vowel modeling
      */
     updateVowelFormants(vowelX, vowelY) {
-        const corners = this.vowelCorners;
+        const freqCorners = this.vowelFreqCorners;
+        const ampCorners = this.vowelAmpCorners;
         
         // Bilinear interpolation between corner vowels
         for (let f = 0; f < 3; f++) { // F1, F2, F3
-            const backInterp = corners.backClose[f] * (1 - vowelY) + corners.backOpen[f] * vowelY;
-            const frontInterp = corners.frontClose[f] * (1 - vowelY) + corners.frontOpen[f] * vowelY;
-            const finalFreq = backInterp * (1 - vowelX) + frontInterp * vowelX;
+            // Interpolate frequencies
+            const backFreqInterp = freqCorners.backClose[f] * (1 - vowelY) + freqCorners.backOpen[f] * vowelY;
+            const frontFreqInterp = freqCorners.frontClose[f] * (1 - vowelY) + freqCorners.frontOpen[f] * vowelY;
+            const finalFreq = backFreqInterp * (1 - vowelX) + frontFreqInterp * vowelX;
             
+            // Interpolate amplitudes
+            const backAmpInterp = ampCorners.backClose[f] * (1 - vowelY) + ampCorners.backOpen[f] * vowelY;
+            const frontAmpInterp = ampCorners.frontClose[f] * (1 - vowelY) + ampCorners.frontOpen[f] * vowelY;
+            const finalAmp = backAmpInterp * (1 - vowelX) + frontAmpInterp * vowelX;
+            
+            // Update both frequency and amplitude
             this.formantFreqs[f] = finalFreq;
+            this.formantAmps[f] = finalAmp;
             this.formants[f].targetFreq = finalFreq;
+            this.formants[f].amplitude = finalAmp;
         }
         
         this.updateFormantCarriers();
@@ -177,12 +205,19 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     /**
      * Generate formant synthesis output (FM path)
      */
-    generateFormantSynthesis(phasor, modulator) {
+    generateFormantSynthesis(phasor, modulator, f1PhaseOffset = 0, f2PhaseOffset = 0, f3PhaseOffset = 0) {
         let totalOutput = 0;
         let f1Output = 0;
         let f2Output = 0;
+        let f3Output = 0;
         
         this.formants.forEach((formant, formantIndex) => {
+            // Determine phase offset for this formant
+            let phaseOffset = 0;
+            if (formantIndex === 0) phaseOffset = f1PhaseOffset; // F1
+            if (formantIndex === 1) phaseOffset = f2PhaseOffset; // F2
+            if (formantIndex === 2) phaseOffset = f3PhaseOffset; // F3
+            
             // Generate both cross-faded carriers for this formant
             const evenCarrier = this.generateFMCarrier(
                 phasor,
@@ -190,6 +225,7 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
                 formant.carrierEven.amplitude,
                 formant.bandwidth / 100.0,
                 modulator,
+                phaseOffset, // Apply phase offset
                 formantIndex === 1 // Use cosine for F2 (index 1)
             );
             
@@ -199,6 +235,7 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
                 formant.carrierOdd.amplitude,
                 formant.bandwidth / 100.0,
                 modulator,
+                phaseOffset, // Apply phase offset
                 formantIndex === 1 // Use cosine for F2 (index 1)
             );
             
@@ -208,24 +245,26 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             // Store individual formant outputs for visualization
             if (formantIndex === 0) f1Output = formantOutput;
             if (formantIndex === 1) f2Output = formantOutput;
+            if (formantIndex === 2) f3Output = formantOutput;
         });
         
         return {
             total: totalOutput * 0.1, // Scale to prevent clipping
             f1: f1Output * 0.1,
-            f2: f2Output * 0.1
+            f2: f2Output * 0.1,
+            f3: f3Output * 0.1
         };
     }
     
     /**
      * Generate FM carrier for formant synthesis
      */
-    generateFMCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, useCosine = false) {
+    generateFMCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, phaseOffset = 0, useCosine = false) {
         if (amplitude <= 0 || harmonicNum <= 0) return 0;
         
-        // UPHO: Carrier phase derived from shared master phasor
+        // UPHO: Carrier phase derived from shared master phasor with phase offset
         const carrierPhasor = (phasor * harmonicNum) % 1.0;
-        const carrierPhase = this.twoPi * carrierPhasor;
+        const carrierPhase = this.twoPi * carrierPhasor + phaseOffset;
         const modulatedPhase = carrierPhase + modulationIndex * modulator;
         
         // Use cosine for F2, sine for F1 and F3
@@ -248,13 +287,14 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const f2Ring = this.applyMorphingSynthesis(fundamental, f2Harmonic, morphValue, modDepthValue);
         const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morphValue, modDepthValue);
         
-        // Mix the three formant rings with appropriate amplitudes
-        const totalOutput = f1Ring * 0.5 + f2Ring * 0.3 + f3Ring * 0.2;
+        // Mix the three formant rings with vowel-specific amplitudes
+        const totalOutput = f1Ring * this.formantAmps[0] + f2Ring * this.formantAmps[1] + f3Ring * this.formantAmps[2];
         
         return {
             total: totalOutput,
             f1: f1Ring,
-            f2: f2Ring
+            f2: f2Ring,
+            f3: f3Ring
         };
     }
     
@@ -346,9 +386,11 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const output = outputs[0];
         if (!output || output.length === 0) return true;
         
-        const outputChannel = output[0];
-        const f1Channel = output.length > 1 ? output[1] : null;
-        const f2Channel = output.length > 2 ? output[2] : null;
+        const outputChannel = output[0];           // Main audio output (scaled)
+        const outputDuplicate = output.length > 1 ? output[1] : null;  // Main duplicate
+        const f1FullChannel = output.length > 2 ? output[2] : null;    // F1 full amplitude
+        const f2FullChannel = output.length > 3 ? output[3] : null;    // F2 full amplitude  
+        const f3FullChannel = output.length > 4 ? output[4] : null;    // F3 full amplitude
         const blockSize = outputChannel.length;
         
         // Update sample rate from global scope if available
@@ -362,11 +404,25 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const vowelY = parameters.vowelY[0];
         const active = parameters.active[0];
         
+        // Debug logging (occasionally)
+        if (Math.random() < 0.001) { // ~0.1% of frames
+            console.log('🔊 Vowel worklet - active:', active, 'freq:', frequency, 'channels:', output.length);
+        }
+        
         // Get a-rate parameters
         const synthBlend = this.expandParameter(parameters.synthBlend, blockSize);
         const morph = this.expandParameter(parameters.morph, blockSize);
         const symmetry = this.expandParameter(parameters.symmetry, blockSize);
         const gain = this.expandParameter(parameters.gain, blockSize);
+        
+        // Get individual synthesis path gains (k-rate)
+        const formantGain = parameters.formantGain[0];
+        const zingGain = parameters.zingGain[0];
+        
+        // Get phase offset parameters (k-rate)
+        const f1PhaseOffset = parameters.f1PhaseOffset[0];
+        const f2PhaseOffset = parameters.f2PhaseOffset[0];
+        const f3PhaseOffset = parameters.f3PhaseOffset[0];
         
         // Fixed parameters for vowel-based synthesis
         const modDepth = 0.5; // Fixed at optimal value for vowel synthesis
@@ -396,26 +452,42 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             const modulator = this.generateModulator(this.masterPhase);
             
             // Generate both synthesis paths with individual formant tracking
-            const { total: formantOutput, f1: formantF1, f2: formantF2 } = this.generateFormantSynthesis(this.masterPhase, modulator);
-            const { total: zingOutput, f1: zingF1, f2: zingF2 } = this.generateZingSynthesis(
+            const { total: formantOutput, f1: formantF1, f2: formantF2, f3: formantF3 } = this.generateFormantSynthesis(this.masterPhase, modulator, f1PhaseOffset, f2PhaseOffset, f3PhaseOffset);
+            const { total: zingOutput, f1: zingF1, f2: zingF2, f3: zingF3 } = this.generateZingSynthesis(
                 this.masterPhase, 
                 morph[sample], 
                 modDepth, 
                 symmetry[sample]
             );
             
+            // Apply individual synthesis path gains
+            const scaledFormantOutput = formantOutput * formantGain;
+            const scaledZingOutput = zingOutput * zingGain;
+            const scaledFormantF1 = formantF1 * formantGain;
+            const scaledFormantF2 = formantF2 * formantGain;
+            const scaledFormantF3 = formantF3 * formantGain;
+            const scaledZingF1 = zingF1 * zingGain;
+            const scaledZingF2 = zingF2 * zingGain;
+            const scaledZingF3 = zingF3 * zingGain;
+            
             // Blend between synthesis paths
             const blend = synthBlend[sample];
-            const blendedOutput = formantOutput * (1.0 - blend) + zingOutput * blend;
-            const blendedF1 = formantF1 * (1.0 - blend) + zingF1 * blend;
-            const blendedF2 = formantF2 * (1.0 - blend) + zingF2 * blend;
+            const blendedOutput = scaledFormantOutput * (1.0 - blend) + scaledZingOutput * blend;
+            const blendedF1 = scaledFormantF1 * (1.0 - blend) + scaledZingF1 * blend;
+            const blendedF2 = scaledFormantF2 * (1.0 - blend) + scaledZingF2 * blend;
+            const blendedF3 = scaledFormantF3 * (1.0 - blend) + scaledZingF3 * blend;
             
             // Apply gain and output
-            outputChannel[sample] = blendedOutput * gain[sample];
+            const finalOutput = blendedOutput * gain[sample];
+            outputChannel[sample] = finalOutput;
             
-            // Output individual formants for visualization if channels available
-            if (f1Channel) f1Channel[sample] = blendedF1 * gain[sample];
-            if (f2Channel) f2Channel[sample] = blendedF2 * gain[sample];
+            // Duplicate main output on channel 1 for compatibility
+            if (outputDuplicate) outputDuplicate[sample] = finalOutput;
+            
+            // Output full-amplitude formants for oscilloscope analysis (channels 2-4)
+            if (f1FullChannel) f1FullChannel[sample] = blendedF1;  // No scaling for analysis
+            if (f2FullChannel) f2FullChannel[sample] = blendedF2;  // No scaling for analysis
+            if (f3FullChannel) f3FullChannel[sample] = blendedF3;  // No scaling for analysis
         }
         
         return true;

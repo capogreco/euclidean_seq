@@ -80,7 +80,7 @@ function handleValueChange(display, value) {
     handleControlChange(target, value);
 
     // Sync real-time parameters that don't need full tone regeneration
-    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'synthBlend', 'morph', 'symmetry'].includes(target)) {
+    if (['portamentoTime', 'attackTime', 'decayTime', 'vowelX', 'vowelY', 'phonemeSteps', 'bpm', 'subdivision', 'synthBlend', 'morph', 'symmetry', 'formantGain', 'zingGain'].includes(target)) {
         appState.set(target, value);
         
         // Update formant synthesizer for vowel changes
@@ -94,7 +94,7 @@ function handleValueChange(display, value) {
         }
         
         // Update Vowel synthesizer parameters
-        if (['synthBlend', 'morph', 'symmetry'].includes(target)) {
+        if (['synthBlend', 'morph', 'symmetry', 'formantGain', 'zingGain'].includes(target)) {
             // Update current synthesizer parameters if it's a vowel synth
             const currentSynth = getCurrentSynthesizer();
             if (currentSynth && (currentSynth.type === 'vowel' || currentSynth.type === 'zing')) {
@@ -1003,32 +1003,9 @@ document.getElementById("synthMode").dispatchEvent(new Event("change"));
 
 // Initialize oscilloscope controls
 function initializeOscilloscope() {
-    oscilloscope = new XYOscilloscope('xyOscilloscope');
+    oscilloscope = new XYOscilloscope('xyOscilloscope', appState);
     
-    const toggleButton = document.getElementById('toggleOscilloscope');
     const gainSlider = document.getElementById('scopeGain');
-    
-    toggleButton.addEventListener('click', () => {
-        const currentSynth = getCurrentSynthesizer();
-        if (!currentSynth) {
-            alert('No synthesizer active. Start playing a sequence first.');
-            return;
-        }
-        
-        if (!oscilloscope.isRunning) {
-            if (oscilloscope.connectToSynthesizer(currentSynth.node)) {
-                oscilloscope.start();
-                toggleButton.textContent = '⏸ Stop Scope';
-                toggleButton.style.background = '#ff4444';
-            } else {
-                alert('Failed to connect oscilloscope to synthesizer');
-            }
-        } else {
-            oscilloscope.stop();
-            toggleButton.textContent = '● Start Scope';
-            toggleButton.style.background = '';
-        }
-    });
     
     gainSlider.addEventListener('input', (e) => {
         const gain = parseFloat(e.target.value);
@@ -1037,21 +1014,16 @@ function initializeOscilloscope() {
         }
     });
     
-    const samplesSlider = document.getElementById('scopeSamples');
-    samplesSlider.addEventListener('input', (e) => {
-        const samples = parseInt(e.target.value);
-        if (oscilloscope) {
-            oscilloscope.setSamplesPerFrame(samples);
-        }
-    });
+    
 }
 
 // Auto-reconnect oscilloscope when synthesizer changes
 function reconnectOscilloscopeIfNeeded() {
-    if (oscilloscope && oscilloscope.isRunning) {
-        const currentSynth = getCurrentSynthesizer();
-        if (currentSynth) {
-            oscilloscope.connectToSynthesizer(currentSynth.node);
+    const currentSynth = getCurrentSynthesizer();
+    if (oscilloscope && currentSynth) {
+        // Use the new reconnection method that handles axis mapping changes
+        if (oscilloscope.reconnectWithNewAxes(currentSynth.node)) {
+            console.log('🔬 Oscilloscope reconnected with new axis mapping');
         }
     }
 }

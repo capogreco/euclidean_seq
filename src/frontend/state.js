@@ -33,6 +33,13 @@ export class AppState {
             synthBlend: 0.5, // Unified vowel synth blend (0=formant, 1=zing)
             morph: 0, // Morphing Zing morph parameter (-1 to 1)
             symmetry: 0.5, // Waveform symmetry control
+            formantGain: 3.0, // Formant synthesis path gain compensation (empirically balanced)
+            zingGain: 0.4, // Zing synthesis path gain compensation (empirically balanced)
+            f1PhaseOffset: 0, // F1 phase offset in degrees (0-360)
+            f2PhaseOffset: 90, // F2 phase offset in degrees (0-360, default 90° for cosine relationship)
+            f3PhaseOffset: 180, // F3 phase offset in degrees (0-360)
+            scopeXAxis: 'f2', // Which formant to display on X-axis
+            scopeYAxis: 'f1', // Which formant to display on Y-axis
         };
 
         // Playback State

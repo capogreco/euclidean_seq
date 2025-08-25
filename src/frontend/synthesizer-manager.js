@@ -62,11 +62,16 @@ function createVowelSynthesizer(frequency, params = {}) {
         vowelY = 0.5,
         synthBlend = 0.5, // 0=formant, 1=zing
         morph = 0,
-        symmetry = 0.5
+        symmetry = 0.5,
+        f1PhaseOffset = 0, // degrees
+        f2PhaseOffset = 90 // degrees
     } = params;
     
     const vowelNode = new AudioWorkletNode(audioContext, 'vowel-synth', {
-        outputChannelCount: [3] // Main mix + F1 + F2
+        outputChannelCount: [6], // Ch0: Main audio, Ch1: Main duplicate, Ch2: F1 full, Ch3: F2 full, Ch4: F3 full, Ch5: Reserved
+        channelCount: 6,
+        channelCountMode: 'explicit',
+        channelInterpretation: 'discrete'
     });
     vowelNode.connect(audioContext.destination, 0, 0); // Main output only
     
@@ -80,6 +85,14 @@ function createVowelSynthesizer(frequency, params = {}) {
     vowelNode.parameters.get('symmetry').setValueAtTime(symmetry, now);
     vowelNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
     vowelNode.parameters.get('gain').setValueAtTime(0.5, now);
+    
+    // Set initial gain compensation (empirically balanced)
+    vowelNode.parameters.get('formantGain').setValueAtTime(3.0, now);
+    vowelNode.parameters.get('zingGain').setValueAtTime(0.4, now);
+    
+    // Set initial phase offsets (convert degrees to radians)
+    vowelNode.parameters.get('f1PhaseOffset').setValueAtTime(f1PhaseOffset * Math.PI / 180, now);
+    vowelNode.parameters.get('f2PhaseOffset').setValueAtTime(f2PhaseOffset * Math.PI / 180, now);
     
     return {
         type: 'vowel',
@@ -101,6 +114,10 @@ function createVowelSynthesizer(frequency, params = {}) {
             if (newParams.morph !== undefined) vowelNode.parameters.get('morph').setValueAtTime(newParams.morph, now);
             if (newParams.symmetry !== undefined) vowelNode.parameters.get('symmetry').setValueAtTime(newParams.symmetry, now);
             if (newParams.gain !== undefined) vowelNode.parameters.get('gain').setValueAtTime(newParams.gain, now);
+            if (newParams.formantGain !== undefined) vowelNode.parameters.get('formantGain').setValueAtTime(newParams.formantGain, now);
+            if (newParams.zingGain !== undefined) vowelNode.parameters.get('zingGain').setValueAtTime(newParams.zingGain, now);
+            if (newParams.f1PhaseOffset !== undefined) vowelNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
+            if (newParams.f2PhaseOffset !== undefined) vowelNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },
         setVowel(x, y) {
             const now = audioContext.currentTime;
@@ -124,11 +141,16 @@ function createZingSynthesizer(frequency, params = {}) {
         symmetry = 0.5,
         vowelX = 0.5,
         vowelY = 0.5,
-        vowelBlend = 0.0
+        vowelBlend = 0.0,
+        f1PhaseOffset = 0, // degrees
+        f2PhaseOffset = 90 // degrees
     } = params;
     
     const zingNode = new AudioWorkletNode(audioContext, 'morphing-zing', {
-        outputChannelCount: [3] // Main mix + F1 + F2
+        outputChannelCount: [6], // Ch0: Main audio, Ch1: Main duplicate, Ch2: F1 full, Ch3: F2 full, Ch4: F3 full, Ch5: Reserved
+        channelCount: 6,
+        channelCountMode: 'explicit',
+        channelInterpretation: 'discrete'
     });
     zingNode.connect(audioContext.destination, 0, 0); // Main output only
     
@@ -143,6 +165,10 @@ function createZingSynthesizer(frequency, params = {}) {
     zingNode.parameters.get('vowelY').setValueAtTime(vowelY, now);
     zingNode.parameters.get('vowelBlend').setValueAtTime(vowelBlend, now);
     zingNode.parameters.get('gain').setValueAtTime(0, now); // Start silent
+    
+    // Set initial phase offsets (convert degrees to radians)
+    zingNode.parameters.get('f1PhaseOffset').setValueAtTime(f1PhaseOffset * Math.PI / 180, now);
+    zingNode.parameters.get('f2PhaseOffset').setValueAtTime(f2PhaseOffset * Math.PI / 180, now);
     
     return {
         type: 'zing',
@@ -166,6 +192,8 @@ function createZingSynthesizer(frequency, params = {}) {
             if (newParams.vowelX !== undefined) zingNode.parameters.get('vowelX').setValueAtTime(newParams.vowelX, now);
             if (newParams.vowelY !== undefined) zingNode.parameters.get('vowelY').setValueAtTime(newParams.vowelY, now);
             if (newParams.vowelBlend !== undefined) zingNode.parameters.get('vowelBlend').setValueAtTime(newParams.vowelBlend, now);
+            if (newParams.f1PhaseOffset !== undefined) zingNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
+            if (newParams.f2PhaseOffset !== undefined) zingNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },
         setVowel(x, y) {
             const now = audioContext.currentTime;
@@ -182,10 +210,18 @@ function createZingSynthesizer(frequency, params = {}) {
  * Create a Formant synthesizer
  */
 function createFormantSynthesizer(frequency, params = {}) {
-    const { vowelX = 0.5, vowelY = 0.5 } = params;
+    const { 
+        vowelX = 0.5, 
+        vowelY = 0.5,
+        f1PhaseOffset = 0, // degrees
+        f2PhaseOffset = 90 // degrees
+    } = params;
     
     const formantNode = new AudioWorkletNode(audioContext, 'formant-synth-processor', {
-        outputChannelCount: [3] // Main mix + F1 + F2
+        outputChannelCount: [6], // Ch0: Main audio, Ch1: Main duplicate, Ch2: F1 full, Ch3: F2 full, Ch4: F3 full, Ch5: Reserved
+        channelCount: 6,
+        channelCountMode: 'explicit',
+        channelInterpretation: 'discrete'
     });
     formantNode.connect(audioContext.destination, 0, 0); // Main output only
     
@@ -195,6 +231,10 @@ function createFormantSynthesizer(frequency, params = {}) {
     formantNode.parameters.get('vowelX').setValueAtTime(vowelX, now);
     formantNode.parameters.get('vowelY').setValueAtTime(vowelY, now);
     formantNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
+    
+    // Set initial phase offsets (convert degrees to radians)
+    formantNode.parameters.get('f1PhaseOffset').setValueAtTime(f1PhaseOffset * Math.PI / 180, now);
+    formantNode.parameters.get('f2PhaseOffset').setValueAtTime(f2PhaseOffset * Math.PI / 180, now);
     
     return {
         type: 'formant',
@@ -212,6 +252,8 @@ function createFormantSynthesizer(frequency, params = {}) {
             const now = audioContext.currentTime;
             if (newParams.vowelX !== undefined) formantNode.parameters.get('vowelX').setValueAtTime(newParams.vowelX, now);
             if (newParams.vowelY !== undefined) formantNode.parameters.get('vowelY').setValueAtTime(newParams.vowelY, now);
+            if (newParams.f1PhaseOffset !== undefined) formantNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
+            if (newParams.f2PhaseOffset !== undefined) formantNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },
         disconnect() {
             formantNode.disconnect();

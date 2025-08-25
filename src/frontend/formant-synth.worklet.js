@@ -37,6 +37,20 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
         minValue: 0,
         maxValue: 1,
         automationRate: 'k-rate'
+      },
+      {
+        name: 'f1PhaseOffset',
+        defaultValue: 0,
+        minValue: 0,
+        maxValue: 6.283185307,
+        automationRate: 'k-rate'
+      },
+      {
+        name: 'f2PhaseOffset',
+        defaultValue: 1.570796327,
+        minValue: 0,
+        maxValue: 6.283185307,
+        automationRate: 'k-rate'
       }
     ];
   }
@@ -198,14 +212,14 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
   /**
    * Generate carrier signal for given harmonic with FM
    */
-  generateCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, useCosine = false) {
+  generateCarrier(phasor, harmonicNum, amplitude, modulationIndex, modulator, phaseOffset = 0, useCosine = false) {
     if (amplitude <= 0 || harmonicNum <= 0) return 0;
     
-    // UPHO: Carrier phase derived from shared master phasor
+    // UPHO: Carrier phase derived from shared master phasor with phase offset
     const carrierPhasor = (phasor * harmonicNum) % 1.0;
     
-    // FM synthesis: carrier + modulation
-    const carrierPhase = 2 * Math.PI * carrierPhasor;
+    // FM synthesis: carrier + modulation with phase offset
+    const carrierPhase = 2 * Math.PI * carrierPhasor + phaseOffset;
     const modulatedPhase = carrierPhase + modulationIndex * modulator;
     
     // Use cosine for F2, sine for F1 and F3
@@ -216,9 +230,11 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
     if (!output || output.length === 0) return true;
     
-    const outputChannel = output[0];
-    const f1Channel = output.length > 1 ? output[1] : null;
-    const f2Channel = output.length > 2 ? output[2] : null;
+    const outputChannel = output[0];           // Main audio output (scaled)
+    const outputDuplicate = output.length > 1 ? output[1] : null;  // Main duplicate  
+    const f1FullChannel = output.length > 2 ? output[2] : null;    // F1 full amplitude
+    const f2FullChannel = output.length > 3 ? output[3] : null;    // F2 full amplitude
+    const f3FullChannel = output.length > 4 ? output[4] : null;    // F3 full amplitude
     const blockSize = outputChannel.length;
     
     // Read AudioParam values (k-rate - single value per block)
@@ -226,6 +242,8 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
     const vowelX = parameters.vowelX[0];
     const vowelY = parameters.vowelY[0];
     const active = parameters.active[0];
+    const f1PhaseOffset = parameters.f1PhaseOffset[0];
+    const f2PhaseOffset = parameters.f2PhaseOffset[0];
     
     // Update vowel morphing if values changed
     if (vowelX !== this.vowelX || vowelY !== this.vowelY) {
@@ -261,8 +279,14 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
       let totalOutput = 0;
       let f1Output = 0;
       let f2Output = 0;
+      let f3Output = 0;
       
       this.formants.forEach((formant, formantIndex) => {
+        // Determine phase offset for this formant
+        let phaseOffset = 0;
+        if (formantIndex === 0) phaseOffset = f1PhaseOffset; // F1
+        if (formantIndex === 1) phaseOffset = f2PhaseOffset; // F2
+        
         // Generate both cross-faded carriers for this formant
         const evenCarrier = this.generateCarrier(
           this.masterPhasor,
@@ -270,6 +294,7 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
           formant.carrierEven.amplitude,
           formant.bandwidth / 100.0, // Scale bandwidth to reasonable modulation index
           modulator,
+          phaseOffset, // Apply phase offset
           formantIndex === 1 // Use cosine for F2 (index 1)
         );
         
@@ -279,6 +304,7 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
           formant.carrierOdd.amplitude,
           formant.bandwidth / 100.0,
           modulator,
+          phaseOffset, // Apply phase offset
           formantIndex === 1 // Use cosine for F2 (index 1)
         );
         
@@ -289,14 +315,20 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
         // Store individual formant outputs for visualization
         if (formantIndex === 0) f1Output = formantOutput;
         if (formantIndex === 1) f2Output = formantOutput;
+        if (formantIndex === 2) f3Output = formantOutput;
       });
       
       // Apply overall gain and output
-      outputChannel[sample] = totalOutput * 0.1; // Scale to prevent clipping
+      const finalOutput = totalOutput * 0.1; // Scale to prevent clipping
+      outputChannel[sample] = finalOutput;
       
-      // Output individual formants for visualization if channels available
-      if (f1Channel) f1Channel[sample] = f1Output * 0.1;
-      if (f2Channel) f2Channel[sample] = f2Output * 0.1;
+      // Duplicate main output on channel 1 for compatibility
+      if (outputDuplicate) outputDuplicate[sample] = finalOutput;
+      
+      // Output full-amplitude formants for oscilloscope analysis (channels 2-4)
+      if (f1FullChannel) f1FullChannel[sample] = f1Output;  // No scaling for analysis
+      if (f2FullChannel) f2FullChannel[sample] = f2Output;  // No scaling for analysis
+      if (f3FullChannel) f3FullChannel[sample] = f3Output;  // No scaling for analysis
     }
     
     return true;
