@@ -205,7 +205,7 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     /**
      * Generate formant synthesis output (FM path)
      */
-    generateFormantSynthesis(phasor, modulator, f1PhaseOffset = 0, f2PhaseOffset = 0, f3PhaseOffset = 0) {
+    generateFormantSynthesis(phasor, modulator, f1PhaseOffset = 0, f2PhaseOffset = 0, f3PhaseOffset = 0, symmetryValue = 0.5) {
         let totalOutput = 0;
         let f1Output = 0;
         let f2Output = 0;
@@ -218,9 +218,12 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             if (formantIndex === 1) phaseOffset = f2PhaseOffset; // F2
             if (formantIndex === 2) phaseOffset = f3PhaseOffset; // F3
             
+            // EXPERIMENT: Apply symmetry to formant synthesis phasor
+            const symmetricalPhasor = this.applySymmetry(phasor, symmetryValue);
+            
             // Generate both cross-faded carriers for this formant
             const evenCarrier = this.generateFMCarrier(
-                phasor,
+                symmetricalPhasor, // Use symmetry-warped phasor
                 formant.carrierEven.harmonicNum,
                 formant.carrierEven.amplitude,
                 formant.bandwidth / 100.0,
@@ -230,7 +233,7 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             );
             
             const oddCarrier = this.generateFMCarrier(
-                phasor,
+                symmetricalPhasor, // Use symmetry-warped phasor
                 formant.carrierOdd.harmonicNum,
                 formant.carrierOdd.amplitude,
                 formant.bandwidth / 100.0,
@@ -457,7 +460,7 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             const modulator = this.generateModulator(this.masterPhase);
             
             // Generate both synthesis paths with individual formant tracking
-            const { total: formantOutput, f1: formantF1, f2: formantF2, f3: formantF3 } = this.generateFormantSynthesis(this.masterPhase, modulator, f1PhaseOffset, f2PhaseOffset, f3PhaseOffset);
+            const { total: formantOutput, f1: formantF1, f2: formantF2, f3: formantF3 } = this.generateFormantSynthesis(this.masterPhase, modulator, f1PhaseOffset, f2PhaseOffset, f3PhaseOffset, symmetry[sample]);
             const { total: zingOutput, f1: zingF1, f2: zingF2, f3: zingF3 } = this.generateZingSynthesis(
                 this.masterPhase, 
                 morph[sample], 
