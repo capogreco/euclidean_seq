@@ -47,7 +47,7 @@ class FormantSynthProcessor extends AudioWorkletProcessor {
       },
       {
         name: 'f2PhaseOffset',
-        defaultValue: 1.570796327,
+        defaultValue: 0,
         minValue: 0,
         maxValue: 6.283185307,
         automationRate: 'k-rate'

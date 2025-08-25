@@ -19,7 +19,7 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             
             // Phase offset parameters (in radians, 0 to 2π)
             { name: 'f1PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' },
-            { name: 'f2PhaseOffset', defaultValue: 1.570796327, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' } // Default to 90° (π/2)
+            { name: 'f2PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' } // F2 uses cosine - no additional offset needed
         ];
     }
 
@@ -127,8 +127,8 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             if (blend < 0.001) {
                 // Original Zing synthesis: single UPL pair with harmonic ratio
                 const safeHarmonicRatio = Math.min(harmonicRatio[i], Math.floor((this.sampleRate * 0.45) / freq[i]));
-                const harmonic = this.generateUPLHarmonic(safeHarmonicRatio, syncTrigger, symmetry[i]);
-                outputSample = this.applyMorphingSynthesis(fundamental, harmonic, morph[i], modDepth[i]);
+                const harmonic = this.generateUPLHarmonic(safeHarmonicRatio, syncTrigger, 0.5);
+                outputSample = this.applyMorphingSynthesis(fundamental, harmonic, morph[i], modDepth[i], shapedFundPhase);
                 
                 // For non-vowel mode, output some reasonable signals for visualization
                 f1Output = fundamental * 0.5;
@@ -142,9 +142,9 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
                 const f3Harmonic = this.generateFormantUPL(2, freq[i], syncTrigger, symmetry[i], 0); // F3 has no phase control
                 
                 // Ring modulate fundamental with each formant harmonic
-                const f1Ring = this.applyMorphingSynthesis(fundamental, f1Harmonic, morph[i], modDepth[i]);
-                const f2Ring = this.applyMorphingSynthesis(fundamental, f2Harmonic, morph[i], modDepth[i]);
-                const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morph[i], modDepth[i]);
+                const f1Ring = this.applyMorphingSynthesis(fundamental, f1Harmonic, morph[i], modDepth[i], shapedFundPhase);
+                const f2Ring = this.applyMorphingSynthesis(fundamental, f2Harmonic, morph[i], modDepth[i], shapedFundPhase);
+                const f3Ring = this.applyMorphingSynthesis(fundamental, f3Harmonic, morph[i], modDepth[i], shapedFundPhase);
                 
                 // Store individual formant outputs for visualization
                 f1Output = f1Ring;
@@ -156,8 +156,8 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
                 
                 if (blend < 0.999) {
                     // Crossfade between original and vowel modes
-                    const originalHarmonic = this.generateUPLHarmonic(harmonicRatio[i], syncTrigger, symmetry[i]);
-                    const originalRing = this.applyMorphingSynthesis(fundamental, originalHarmonic, morph[i], modDepth[i]);
+                    const originalHarmonic = this.generateUPLHarmonic(harmonicRatio[i], syncTrigger, 0.5);
+                    const originalRing = this.applyMorphingSynthesis(fundamental, originalHarmonic, morph[i], modDepth[i], shapedFundPhase);
                     outputSample = originalRing * (1.0 - blend) + vowelRing * blend;
                 } else {
                     outputSample = vowelRing;
@@ -217,13 +217,12 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
             upperPhase = 0;
         }
         
-        // Apply symmetry and generate waveforms (use cosine for F2)
+        // Apply symmetry and generate waveforms (use sine for original Zing)
         const shapedLowerPhase = this.applySymmetry(lowerPhase, symmetryValue);
         const shapedUpperPhase = this.applySymmetry(upperPhase, symmetryValue);
-        const useCosine = formantIndex === 1; // F2 uses cosine
         
-        const lowerWave = this.generateWaveform(shapedLowerPhase, 0, useCosine);
-        const upperWave = this.generateWaveform(shapedUpperPhase, 0, useCosine);
+        const lowerWave = this.generateWaveform(shapedLowerPhase, 0, false);
+        const upperWave = this.generateWaveform(shapedUpperPhase, 0, false);
         
         // UPL cross-fade
         return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
@@ -264,26 +263,40 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
         return lowerWave * (1.0 - crossfadeAmount) + upperWave * crossfadeAmount;
     }
     
-    // Apply Morphing Zing synthesis (ring mod + AM morphing)
-    applyMorphingSynthesis(fundamental, harmonic, morphValue, modDepthValue) {
+    // Apply Morphing Zing synthesis (PM + Ring Modulation crossfading)
+    applyMorphingSynthesis(fundamental, harmonic, morphValue, modDepthValue, shapedPhase) {
         if (Math.abs(morphValue) < 0.001) {
-            // Pure ring modulation
-            return fundamental * harmonic;
+            // Pure Phase Modulation path:
+            // Apply phase modulation to the already-shaped phase
+            const pmPhase = (shapedPhase + harmonic * modDepthValue * 0.1) % 1.0;
+            return this.generateWaveform(pmPhase, 0);
         } else if (morphValue > 0) {
-            // Morph towards AM with fundamental as modulator
-            const ringWeight = Math.cos(morphValue * this.halfPi);
-            const amWeight = Math.sin(morphValue * this.halfPi);
-            const ring = fundamental * harmonic;
-            const am = (1 + fundamental * modDepthValue) * harmonic;
-            return ring * ringWeight + am * amWeight;
+            // Morph from PM towards Ring Modulation
+            const pmWeight = Math.cos(morphValue * this.halfPi);
+            const rmWeight = Math.sin(morphValue * this.halfPi);
+            
+            // Phase Modulation path (uses shaped phase)
+            const pmPhase = (shapedPhase + harmonic * modDepthValue * 0.1) % 1.0;
+            const pmSignal = this.generateWaveform(pmPhase, 0);
+            
+            // Ring Modulation path (uses shaped fundamental)
+            const rmSignal = fundamental * harmonic;
+            
+            return pmSignal * pmWeight + rmSignal * rmWeight;
         } else {
-            // Morph towards AM with harmonic as modulator
+            // Morph from PM towards inverted Ring Modulation
             const absMorph = Math.abs(morphValue);
-            const ringWeight = Math.cos(absMorph * this.halfPi);
-            const amWeight = Math.sin(absMorph * this.halfPi);
-            const ring = fundamental * harmonic;
-            const am = fundamental * (1 + harmonic * modDepthValue);
-            return ring * ringWeight + am * amWeight;
+            const pmWeight = Math.cos(absMorph * this.halfPi);
+            const rmWeight = Math.sin(absMorph * this.halfPi);
+            
+            // Phase Modulation path (uses shaped phase)
+            const pmPhase = (shapedPhase + harmonic * modDepthValue * 0.1) % 1.0;
+            const pmSignal = this.generateWaveform(pmPhase, 0);
+            
+            // Inverted Ring Modulation path
+            const rmSignal = fundamental * (-harmonic);
+            
+            return pmSignal * pmWeight + rmSignal * rmWeight;
         }
     }
     
@@ -292,20 +305,23 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
         return param.length === 1 ? Array(bufferSize).fill(param[0]) : param;
     }
     
-    // Symmetry control: morphs waveform from saw down → triangle → saw up
+    // Symmetry control: continuous phase warping for sine waves
+    // Creates pulse-width-like effect by warping phase timing
+    // symmetry = 0.5 naturally produces unmodified phase (neutral)
     applySymmetry(phase, symmetry) {
-        if (symmetry < 0.5) {
-            // Skew toward sawtooth down
-            const skew = symmetry * 2;
-            return phase < skew ? 
-                (phase / skew) * 0.5 : 
-                0.5 + ((phase - skew) / (1 - skew)) * 0.5;
+        // Convert symmetry [0,1] to skew factor 
+        // symmetry = 0.5 → skew = 0.5 (neutral)
+        // symmetry < 0.5 → skew < 0.5 (compress first half) 
+        // symmetry > 0.5 → skew > 0.5 (expand first half)
+        const skew = Math.max(0.01, Math.min(0.99, symmetry));
+        
+        // Piecewise linear phase warping
+        if (phase < 0.5) {
+            // First half: map [0, 0.5] to [0, skew]
+            return (phase / 0.5) * skew;
         } else {
-            // Skew toward sawtooth up
-            const skew = (symmetry - 0.5) * 2;
-            return phase < (1 - skew) ? 
-                (phase / (1 - skew)) * 0.5 : 
-                0.5 + ((phase - (1 - skew)) / skew) * 0.5;
+            // Second half: map [0.5, 1] to [skew, 1]  
+            return skew + ((phase - 0.5) / 0.5) * (1.0 - skew);
         }
     }
     
@@ -314,44 +330,6 @@ class MorphingZingProcessor extends AudioWorkletProcessor {
         // For now, use sine waves - can be extended to support other waveforms
         // with full PolyBLEP anti-aliasing for sawtooth/square waves
         return useCosine ? Math.cos(this.twoPi * phase) : Math.sin(this.twoPi * phase);
-    }
-    
-    // PolyBLEP anti-aliasing correction (for future sawtooth/square implementation)
-    polyBLEP(phase, phaseIncrement) {
-        const dt = phaseIncrement;
-        
-        if (phase < dt) {
-            const t = phase / dt;
-            return t + t - t * t - 1.0;
-        } else if (phase > 1.0 - dt) {
-            const t = (phase - 1.0) / dt;
-            return t * t + t + t + 1.0;
-        }
-        
-        return 0.0;
-    }
-    
-    // Band-limited sawtooth with PolyBLEP (for future extension)
-    generateBandLimitedSaw(phase, phaseIncrement) {
-        // Basic saw
-        let output = 2 * phase - 1;
-        
-        // Apply PolyBLEP correction at discontinuity
-        output += this.polyBLEP(phase, phaseIncrement);
-        
-        return output;
-    }
-    
-    // Band-limited square with PolyBLEP (for future extension)
-    generateBandLimitedSquare(phase, phaseIncrement) {
-        // Basic square
-        let output = phase < 0.5 ? 1 : -1;
-        
-        // Apply PolyBLEP at both edges
-        output += this.polyBLEP(phase, phaseIncrement);
-        output -= this.polyBLEP((phase + 0.5) % 1.0, phaseIncrement);
-        
-        return output * 0.5; // Scale for unity gain
     }
 }
 

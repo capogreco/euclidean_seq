@@ -295,14 +295,16 @@ class XYOscilloscope {
             let xSample = this.dataArrayX[sampleIndex];
             let ySample = this.dataArrayY[sampleIndex];
             
-            xSample = this.removeDC(xSample, this.dcRemovalX);
-            ySample = this.removeDC(ySample, this.dcRemovalY);
+            // Apply DC removal (high-pass filter) to center signals around zero
+            // xSample = this.removeDC(xSample, this.dcRemovalX); // DISABLED: Stage 1 centering
+            // ySample = this.removeDC(ySample, this.dcRemovalY); // DISABLED: Stage 1 centering
             
             xSample = Math.max(-1, Math.min(1, xSample));
             ySample = Math.max(-1, Math.min(1, ySample));
             
-            const x = this.centerX + (xSample * this.gain * maxRadius);
-            const y = this.centerY - (ySample * this.gain * maxRadius);
+            // Convert to screen coordinates (bipolar: -1 to +1 maps to full screen range)
+            const x = this.centerX + (xSample * this.gain * maxRadius); // Canvas centering enabled
+            const y = this.centerY - (ySample * this.gain * maxRadius); // Canvas centering enabled
             
             // Add the point to this frame's temporary array.
             framePoints.push({ x, y });
@@ -318,18 +320,11 @@ class XYOscilloscope {
         
         // Debug output occasionally
         if (Math.random() < 0.01) { // ~1% of frames
-            const rawX = this.dataArrayX.slice(0, 5);
-            const rawY = this.dataArrayY.slice(0, 5);
-            console.log('🔬 Debug:', { 
-                bufferLength,
-                actualSamplesPerFrame,
-                currentFramePoints: this.trail[0] ? this.trail[0].length : 0,
-                sampleOffset: this.sampleOffset.toFixed(2),
-                rawXSamples: rawX,
-                rawYSamples: rawY,
-                xAxis: this.appState.get('scopeXAxis'),
-                yAxis: this.appState.get('scopeYAxis')
-            });
+            const rawX = this.dataArrayX.slice(0, 10);
+            const rawY = this.dataArrayY.slice(0, 10);
+            console.log('🔬 RAW X SAMPLES:', rawX.map(x => x.toFixed(4)).join(', '));
+            console.log('🔬 RAW Y SAMPLES:', rawY.map(y => y.toFixed(4)).join(', '));
+            console.log('🔬 AXES:', this.appState.get('scopeXAxis'), 'vs', this.appState.get('scopeYAxis'));
         }
         
         this.draw();

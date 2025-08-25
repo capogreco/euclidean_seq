@@ -35,8 +35,8 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             
             // Phase offset parameters (in radians, 0 to 2π)
             { name: 'f1PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' },
-            { name: 'f2PhaseOffset', defaultValue: 1.570796327, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }, // Default to 90° (π/2)
-            { name: 'f3PhaseOffset', defaultValue: 3.141592654, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }  // Default to 180° (π)
+            { name: 'f2PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }, // F2 uses cosine - no additional offset needed
+            { name: 'f3PhaseOffset', defaultValue: 0, minValue: 0, maxValue: 6.283185307, automationRate: 'k-rate' }  // F3 uses sine - no additional offset needed
         ];
     }
 
@@ -352,19 +352,24 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
     }
     
     /**
-     * Symmetry control: morphs waveform from saw down → triangle → saw up
+     * Symmetry control: continuous phase warping for sine waves
+     * Creates pulse-width-like effect by warping phase timing
+     * symmetry = 0.5 naturally produces unmodified phase (neutral)
      */
     applySymmetry(phase, symmetry) {
-        if (symmetry < 0.5) {
-            const skew = symmetry * 2;
-            return phase < skew ? 
-                (phase / skew) * 0.5 : 
-                0.5 + ((phase - skew) / (1 - skew)) * 0.5;
+        // Convert symmetry [0,1] to skew factor 
+        // symmetry = 0.5 → skew = 0.5 (neutral)
+        // symmetry < 0.5 → skew < 0.5 (compress first half) 
+        // symmetry > 0.5 → skew > 0.5 (expand first half)
+        const skew = Math.max(0.01, Math.min(0.99, symmetry));
+        
+        // Piecewise linear phase warping
+        if (phase < 0.5) {
+            // First half: map [0, 0.5] to [0, skew]
+            return (phase / 0.5) * skew;
         } else {
-            const skew = (symmetry - 0.5) * 2;
-            return phase < (1 - skew) ? 
-                (phase / (1 - skew)) * 0.5 : 
-                0.5 + ((phase - (1 - skew)) / skew) * 0.5;
+            // Second half: map [0.5, 1] to [skew, 1]  
+            return skew + ((phase - 0.5) / 0.5) * (1.0 - skew);
         }
     }
     
@@ -485,9 +490,9 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
             if (outputDuplicate) outputDuplicate[sample] = finalOutput;
             
             // Output full-amplitude formants for oscilloscope analysis (channels 2-4)
-            if (f1FullChannel) f1FullChannel[sample] = blendedF1;  // No scaling for analysis
-            if (f2FullChannel) f2FullChannel[sample] = blendedF2;  // No scaling for analysis
-            if (f3FullChannel) f3FullChannel[sample] = blendedF3;  // No scaling for analysis
+            if (f1FullChannel) f1FullChannel[sample] = blendedF1;  // F1 formant output
+            if (f2FullChannel) f2FullChannel[sample] = blendedF2;  // F2 formant output
+            if (f3FullChannel) f3FullChannel[sample] = blendedF3;  // F3 formant output
         }
         
         return true;
