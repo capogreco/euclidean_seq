@@ -116,7 +116,7 @@ export function updateSequenceVisualization(appState) {
         const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
         const cycleLength = lcm(noteLength, phonemeLength);
         
-        html += `<div class="sequence-section-label">Phoneme Sequence (${phonemeLength} steps • ${cycleLength}-step cycle)</div>`;
+        html += `<div class="sequence-section-label">phoneme</div>`;
         html += '<table class="sequence-grid phoneme-sequence">';
         
         // Phoneme step headers
@@ -145,7 +145,7 @@ export function updateSequenceVisualization(appState) {
 
     // Create note sequence grid table
     const noteLength = appState.playback.sequencePattern.steps.length;
-    html += `<div class="sequence-section-label">Note Sequence (${noteLength} steps)</div>`;
+    html += `<div class="sequence-section-label">note</div>`;
     html += '<table class="sequence-grid note-sequence">';
 
     // Step headers row

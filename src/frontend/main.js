@@ -3,7 +3,7 @@ import { AppState } from './state.js';
 import { TonePipeline } from './toneGenerator.js';
 import { generateToneData, orderTones } from './toneEngine.js';
 import { euclideanRhythm, patternToIntervals, intervalsToPattern } from './euclidean.js';
-import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, updateSynthVowel } from './audio.js';
+import { audioContext, playNote, togglePlay, playSequence, getRootFrequency, midiToFreq, freqToMidi, triggerMonoStep, updateSynthVowel, calculatePortamentoTime } from './audio.js';
 import { populateMidiDropdown, displayColumn, updateSequenceVisualization, updateSequenceNotesMax, setupValueControls } from './ui.js';
 import { initializeAudioWorklet, getSchedulerNode, sendToScheduler, isSchedulerReady, updateSchedulerBpm, updateSchedulerSubdivision, updateSchedulerPatterns } from './audio-worklet-service.js';
 import { setVowelPosition, isFormantSynthReady } from './formant-synth-service.js';
@@ -830,7 +830,7 @@ async function initializeApp() {
                 // Trigger note sequence step (no phoneme coupling)
                 const freq = appState.playback.sequencePattern.steps[payload.noteStep];
                 if (freq) {
-                    // console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz`);
+                    console.log(`🎵 NOTE STEP ${payload.noteStep}: freq=${freq.toFixed(1)}Hz [time: ${payload.elapsedTime?.toFixed(3)}s]`);
                     triggerMonoStep(appState, payload.noteStep, freq);
                 }
             }
@@ -839,9 +839,11 @@ async function initializeApp() {
                 // Update synthesizer vowel in real-time (independent of note triggers)
                 const vowelPosition = appState.playback.phonemePattern.positions[payload.phonemeStep];
                 if (vowelPosition) {
-                    updateSynthVowel(appState, vowelPosition);
+                    // Calculate portamento time for this step to sync vowel changes with frequency changes
+                    const portamentoTime = calculatePortamentoTime(appState, payload.phonemeStep);
+                    updateSynthVowel(appState, vowelPosition, portamentoTime);
                 }
-                // console.log(`🗣️ PHONEME STEP ${payload.phonemeStep}: vowel=${appState.playback.phonemePattern.vowels[payload.phonemeStep] || 'none'} -> (${vowelPosition?.x.toFixed(2)}, ${vowelPosition?.y.toFixed(2)})`);
+                console.log(`🗣️ PHONEME STEP ${payload.phonemeStep}: vowel=(${vowelPosition?.x.toFixed(2)}, ${vowelPosition?.y.toFixed(2)}) [time: ${payload.elapsedTime?.toFixed(3)}s]`);
             }
         };
         // console.log('🎵 AudioWorklet message handler set up');
@@ -885,6 +887,82 @@ async function initializeApp() {
 // Initialize everything
 populateMidiDropdown();
 setupValueControls(handleValueChange);
+
+// Setup clickable number controls (Pure Data style)
+function setupClickableNumbers() {
+    document.querySelectorAll('.clickable-number').forEach(element => {
+        const param = element.dataset.param;
+        const min = parseFloat(element.dataset.min) || 0;
+        const max = parseFloat(element.dataset.max) || 100;
+        const step = parseFloat(element.dataset.step) || 1;
+        
+        element.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            if (e.shiftKey || e.button === 2) {
+                // Shift-click or right-click: decrement
+                const currentValue = parseFloat(element.textContent);
+                const newValue = Math.max(min, currentValue - step);
+                element.textContent = newValue;
+                appState.set(param, newValue);
+                handleValueChange(element, newValue);
+            } else {
+                // Left click: increment
+                const currentValue = parseFloat(element.textContent);
+                const newValue = Math.min(max, currentValue + step);
+                element.textContent = newValue;
+                appState.set(param, newValue);
+                handleValueChange(element, newValue);
+            }
+        });
+        
+        // Prevent context menu on right-click
+        element.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
+        // Double-click to edit directly
+        element.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            const currentValue = element.textContent;
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.value = currentValue;
+            input.min = min;
+            input.max = max;
+            input.step = step;
+            input.style.width = element.offsetWidth + 'px';
+            input.style.background = '#2a2a2a';
+            input.style.color = '#e0e0e0';
+            input.style.border = 'none';
+            input.style.fontSize = '14px';
+            input.style.textAlign = 'center';
+            input.style.fontFamily = 'inherit';
+            
+            element.style.display = 'none';
+            element.parentNode.insertBefore(input, element);
+            input.select();
+            
+            const finishEdit = () => {
+                const newValue = Math.min(max, Math.max(min, parseFloat(input.value) || min));
+                element.textContent = newValue;
+                element.style.display = 'inline-block';
+                input.remove();
+                appState.set(param, newValue);
+                handleValueChange(element, newValue);
+            };
+            
+            input.addEventListener('blur', finishEdit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') {
+                    finishEdit();
+                }
+            });
+        });
+    });
+}
+
+setupClickableNumbers();
 
 
 // Initialize oscilloscope controls

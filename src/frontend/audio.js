@@ -7,6 +7,7 @@ import {
     isFormantSynthReady,
     setFormantActive 
 } from './formant-synth-service.js';
+import { updateFrequencyParam, updateVowelParam } from './parameter-coordinator.js';
 
 // Audio context initialization
 export const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -126,7 +127,7 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
         clearInterval(playIntervals[type]);
         playIntervals[type] = null;
         playIndices[type] = 0;
-        button.textContent = "▶ Play";
+        button.textContent = "|>";
         button.classList.remove("playing");
         document
             .querySelectorAll(`#${type}Tones .tone-item`)
@@ -146,7 +147,7 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
 
         if (!tones || !indices || indices.length === 0) return;
 
-        button.textContent = "■ Stop";
+        button.textContent = "||";
         button.classList.add("playing");
 
         const playNext = () => {
@@ -164,7 +165,7 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
             if (!currentIndices || currentIndices.length === 0) {
                 clearInterval(playIntervals[type]);
                 playIntervals[type] = null;
-                button.textContent = "▶ Play";
+                button.textContent = "|>";
                 button.classList.remove("playing");
                 return;
             }
@@ -197,15 +198,31 @@ export function togglePlay(type, appState, currentData, playIntervals, playIndic
     }
 }
 
+// Helper function to calculate portamento time
+export function calculatePortamentoTime(appState, step) {
+    const hasPortamento = appState.playback.sequencePattern.portamento[step];
+    if (!hasPortamento) return 0; // Immediate change for non-portamento steps
+    
+    const bpm = appState.params.bpm;
+    const subdivision = appState.params.subdivision;
+    const stepTimeSeconds = 60 / (bpm * subdivision);
+    const portamentoPercentage = appState.params.portamentoTime / 100;
+    let portamentoTime = stepTimeSeconds * portamentoPercentage;
+    
+    // Ensure the slide has time to finish before the next step begins
+    const maxPortamentoTime = stepTimeSeconds - 0.01; // 10ms safety buffer
+    return Math.min(portamentoTime, maxPortamentoTime);
+}
+
 // Real-time vowel updates for synthesizer
-export function updateSynthVowel(appState, vowelPosition) {
+export function updateSynthVowel(appState, vowelPosition, rampTime = 0.005) {
     if (!vowelPosition) return;
     
     const { x: vowelX, y: vowelY } = vowelPosition;
     
     // Update mono oscillator if active (works for both formant and zing synths)
     if (appState.playback.monoOsc && appState.playback.monoOsc.setVowel && typeof appState.playback.monoOsc.setVowel === 'function') {
-        appState.playback.monoOsc.setVowel(vowelX, vowelY);
+        appState.playback.monoOsc.setVowel(vowelX, vowelY, rampTime);
     }
     
     // Update formant synthesis parameters
@@ -241,35 +258,15 @@ export function triggerMonoStep(appState, step, freq) {
         return;
     }
 
-    if (hasPortamento && previousFreq && previousFreq !== freq) {
-        // --- CORRECT PORTAMENTO IMPLEMENTATION ---
 
-        // 1. Clear any scheduled changes from this point forward. This creates a clean slate.
-        frequencyParam.cancelScheduledValues(now);
-        
-        // 2. Explicitly set the starting point of the ramp to the previous note's frequency.
-        // This is the most critical step: it anchors the slide's start, preventing the audible "jump".
-        frequencyParam.setValueAtTime(previousFreq, now);
-
-        // 3. Calculate the duration of the portamento slide based on BPM and subdivision.
-        const bpm = appState.params.bpm;
-        const subdivision = appState.params.subdivision;
-        const stepTimeSeconds = 60 / (bpm * subdivision);
-        const portamentoPercentage = appState.params.portamentoTime / 100;
-        let portamentoTime = stepTimeSeconds * portamentoPercentage;
-        
-        // 4. Ensure the slide has time to finish before the next step begins.
-        const maxPortamentoTime = stepTimeSeconds - 0.01; // 10ms safety buffer
-        portamentoTime = Math.min(portamentoTime, maxPortamentoTime);
-        
-        // 5. Schedule the smooth pitch slide to the new target frequency.
-        frequencyParam.linearRampToValueAtTime(freq, now + portamentoTime);
-
+    // Calculate portamento time using helper function
+    const portamentoTime = calculatePortamentoTime(appState, step);
+    
+    // Use parameter coordinator for all frequency changes
+    if (portamentoTime > 0) {
+        updateFrequencyParam(frequencyParam, freq, portamentoTime, `portamento-step${step}`);
     } else {
-        // --- NON-PORTAMENTO IMPLEMENTATION ---
-        // For notes without portamento, cancel any ongoing slides and jump immediately to the new frequency.
-        frequencyParam.cancelScheduledValues(now);
-        frequencyParam.setValueAtTime(freq, now);
+        updateFrequencyParam(frequencyParam, freq, 0, `direct-step${step}`);
     }
     
     // Finally, update the application's state with the new target frequency.
@@ -289,7 +286,7 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
     if (appState.playback.isPlaying) {
         sendToScheduler('stop');
         appState.playback.isPlaying = false;
-        button.textContent = "▶ Play";
+        button.textContent = "|>";
         button.classList.remove("playing");
 
         // Clean shutdown with new system
@@ -358,7 +355,7 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
                 subdivision: appState.params.subdivision
             });
             appState.playback.isPlaying = true;
-            button.textContent = "■ Stop";
+            button.textContent = "||";
         } else {
             throw new Error("AudioWorklet scheduler not ready.");
         }
@@ -368,7 +365,7 @@ export async function playSequence(appState, generateSequencePattern, updateSequ
         appState.playback.isPlaying = false;
         stopCurrentSynthesizer();
         appState.playback.monoOsc = null;
-        button.textContent = "▶ Play";
+        button.textContent = "|>";
     } finally {
         appState.playback.isInitializing = false;
         button.disabled = false;

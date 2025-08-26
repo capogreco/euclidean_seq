@@ -427,9 +427,10 @@ class VowelSynthProcessor extends AudioWorkletProcessor {
         const active = parameters.active[0];
         
         // Debug logging (occasionally)
-        if (Math.random() < 0.001) { // ~0.1% of frames
-            console.log('🔊 Vowel worklet - active:', active, 'freq:', frequency, 'channels:', output.length);
-        }
+        // Removed noisy logging
+        // if (Math.random() < 0.001) { // ~0.1% of frames
+        //     console.log('🔊 Vowel worklet - active:', active, 'freq:', frequency, 'channels:', output.length);
+        // }
         
         // Get a-rate parameters
         const synthBlend = this.expandParameter(parameters.synthBlend, blockSize);

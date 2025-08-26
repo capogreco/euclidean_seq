@@ -82,15 +82,15 @@ class XYOscilloscope {
     }
     
     drawInitialGrid() {
-        // White background
-        this.ctx.fillStyle = '#fff';
+        // Match page background
+        this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, this.drawWidth, this.drawHeight);
         this.drawGrid();
     }
     
     drawGrid() {
         // Clean background - no grid elements
-        // Just a plain white background for minimal distraction
+        // Just a plain black background for minimal distraction
     }
     
     connectToSynthesizer(synthNode) {
@@ -326,8 +326,8 @@ class XYOscilloscope {
     }
     
     draw() {
-        // Clear canvas with white background
-        this.ctx.fillStyle = '#fff';
+        // Clear canvas with page background color
+        this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, this.drawWidth, this.drawHeight);
         
         // Redraw grid
@@ -339,7 +339,7 @@ class XYOscilloscope {
         const frame = this.trail[0];
         if (frame.length < 2) return;
 
-        this.ctx.strokeStyle = '#000';
+        this.ctx.strokeStyle = '#ffffff'; // White lines for clean visibility
         this.ctx.lineWidth = 1;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';

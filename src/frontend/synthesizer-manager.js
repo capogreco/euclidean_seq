@@ -6,6 +6,7 @@
  */
 
 import { audioContext } from './audio.js';
+import { updateVowelParam } from './parameter-coordinator.js';
 
 // Simple global state
 let currentSynthesizer = null;
@@ -118,10 +119,13 @@ function createVowelSynthesizer(frequency, params = {}) {
             if (newParams.f1PhaseOffset !== undefined) vowelNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
             if (newParams.f2PhaseOffset !== undefined) vowelNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },
-        setVowel(x, y) {
-            const now = audioContext.currentTime;
-            vowelNode.parameters.get('vowelX').setValueAtTime(x, now);
-            vowelNode.parameters.get('vowelY').setValueAtTime(y, now);
+        setVowel(x, y, rampTime = 0.005) {
+            // Use parameter coordinator to prevent race conditions
+            const vowelXParam = vowelNode.parameters.get('vowelX');
+            const vowelYParam = vowelNode.parameters.get('vowelY');
+            
+            updateVowelParam(vowelXParam, x, rampTime, 'vowel-synth-x');
+            updateVowelParam(vowelYParam, y, rampTime, 'vowel-synth-y');
         },
         disconnect() {
             vowelNode.disconnect();
@@ -194,10 +198,13 @@ function createZingSynthesizer(frequency, params = {}) {
             if (newParams.f1PhaseOffset !== undefined) zingNode.parameters.get('f1PhaseOffset').setValueAtTime(newParams.f1PhaseOffset * Math.PI / 180, now);
             if (newParams.f2PhaseOffset !== undefined) zingNode.parameters.get('f2PhaseOffset').setValueAtTime(newParams.f2PhaseOffset * Math.PI / 180, now);
         },
-        setVowel(x, y) {
-            const now = audioContext.currentTime;
-            zingNode.parameters.get('vowelX').setValueAtTime(x, now);
-            zingNode.parameters.get('vowelY').setValueAtTime(y, now);
+        setVowel(x, y, rampTime = 0.005) {
+            // Use parameter coordinator to prevent race conditions
+            const vowelXParam = zingNode.parameters.get('vowelX');
+            const vowelYParam = zingNode.parameters.get('vowelY');
+            
+            updateVowelParam(vowelXParam, x, rampTime, 'zing-synth-x');
+            updateVowelParam(vowelYParam, y, rampTime, 'zing-synth-y');
         },
         disconnect() {
             zingNode.disconnect();

@@ -6,6 +6,7 @@
  */
 
 import { audioContext } from './audio.js';
+import { updateVowelParam } from './parameter-coordinator.js';
 
 let formantSynthNode = null;
 let isInitialized = false;
@@ -173,10 +174,13 @@ export function createFormantOscillator(frequency = 220, vowelX = 0.5, vowelY = 
   formantSynthNode.parameters.get('active').setValueAtTime(0, now); // Start inactive
   
   // Add helper methods for compatibility
-  formantSynthNode.setVowel = function(x, y) {
-    const now = audioContext.currentTime;
-    this.parameters.get('vowelX').setValueAtTime(x, now);
-    this.parameters.get('vowelY').setValueAtTime(y, now);
+  formantSynthNode.setVowel = function(x, y, rampTime = 0.005) {
+    // Use parameter coordinator to prevent race conditions
+    const vowelXParam = this.parameters.get('vowelX');
+    const vowelYParam = this.parameters.get('vowelY');
+    
+    updateVowelParam(vowelXParam, x, rampTime, 'formant-synth-x');
+    updateVowelParam(vowelYParam, y, rampTime, 'formant-synth-y');
   };
   
   formantSynthNode.start = function(time = 0) {

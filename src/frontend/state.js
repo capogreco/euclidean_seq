@@ -14,11 +14,11 @@ export class AppState {
             sequenceBase: -2,
             sequenceOctaves: 3,
             sequenceRotation: 1,
-            bpm: 120,
-            subdivision: 4, // Quarter notes
-            portamentoSteps: 2,
+            bpm: 60,
+            subdivision: 1, // Whole notes
+            portamentoSteps: 5,
             portamentoRotation: 2,
-            portamentoTime: 35, // Percentage of step length (0-100%)
+            portamentoTime: 100, // Percentage of step length (0-100%)
             rhythmPulses: 4,
             rhythmRotation: 0,
             patternSteps: 8,

@@ -20,63 +20,36 @@
                 <button
                     class="play-button"
                     id="playSequence"
-                    style="width: 100px; height: 40px; font-size: 16px"
+                    style="width: 60px; height: 30px; font-size: 14px"
                 >
-                    ▶ Play
+                    |>
                 </button>
             </div>
         </div>
 
         <div class="sequence-section">
-            <div class="sequence-header">
-                <h2>PATTERN & PLAYBACK</h2>
-            </div>
             <div class="sequence-visualization">
                 <!-- Sequence visualization will go here -->
             </div>
             <div class="sequence-controls">
                 <div class="sequence-control-group">
-                    <h3>Tempo</h3>
-                    <div class="control">
-                        <label>BPM</label>
-                        <div class="value-control">
-                            <button
-                                class="value-btn"
-                                data-target="bpm"
-                                data-delta="-5"
-                            >
-                                −
-                            </button>
-                            <div
-                                class="value-display"
-                                id="bpmValue"
-                                data-min="60"
-                                data-max="200"
-                                data-default="120"
-                            >
-                                120
-                            </div>
-                            <button
-                                class="value-btn"
-                                data-target="bpm"
-                                data-delta="5"
-                            >
-                                +
-                            </button>
-                        </div>
+                    <div class="section-label">tempo</div>
+                    <div class="simple-control">
+                        <label>bpm</label>
+                        <div class="clickable-number" id="bpmValue" data-param="bpm" data-min="60" data-max="200" data-step="5">60</div>
                     </div>
                     <div class="control">
                         <label>Subdivision</label>
                         <div class="value-control">
                             <button class="value-btn" data-target="subdivision" data-delta="-1">-</button>
-                            <span class="value-display" id="subdivisionValue" data-min="1" data-max="32" data-default="4">4</span>
+                            <span class="value-display" id="subdivisionValue" data-min="1" data-max="32" data-default="1">1</span>
                             <button class="value-btn" data-target="subdivision" data-delta="1">+</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="sequence-control-group">
-                    <h3>Pattern</h3>
+                    <div class="section-label">pattern</div>
                     <div class="control" id="patternStepsControl">
                         <label>Steps</label>
                         <div class="value-control">
@@ -121,16 +94,15 @@
                         <button
                             class="play-button"
                             id="reshuffleButton"
-                            style="background: #fff"
                         >
-                            ↻ Reshuffle
+                            ↻
                         </button>
                     </div>
                 </div>
 
 
                 <div class="sequence-control-group mono-only">
-                    <h3>Portamento</h3>
+                    <div class="section-label">portamento</div>
                     <div class="control">
                         <label>Time (%)</label>
                         <div class="value-control">
@@ -146,9 +118,9 @@
                                 id="portamentoTimeValue"
                                 data-min="0"
                                 data-max="100"
-                                data-default="35"
+                                data-default="100"
                             >
-                                35
+                                100
                             </div>
                             <button
                                 class="value-btn"
@@ -174,9 +146,9 @@
                                 id="portamentoStepsValue"
                                 data-min="0"
                                 data-max="16"
-                                data-default="2"
+                                data-default="5"
                             >
-                                2
+                                5
                             </div>
                             <button
                                 class="value-btn"
@@ -219,7 +191,7 @@
 
 
                 <div class="sequence-control-group">
-                    <h3>Vowel Synthesis</h3>
+                    <div class="section-label">vowel synthesis</div>
                     <div class="control vowel-control">
                         <label>Symmetry</label>
                         <div class="value-control">
@@ -318,7 +290,7 @@
                 </div>
 
                 <div class="control-group">
-                    <h3>Phoneme Sequence</h3>
+                    <div class="section-label">phoneme sequence</div>
                     <div class="control">
                         <label>Phoneme Steps</label>
                         <div class="value-control">
@@ -351,9 +323,8 @@
                         <button
                             class="play-button"
                             id="regeneratePhonemes"
-                            style="background: #fff; width: 100%"
                         >
-                            ↻ New Phonemes
+                            ↻
                         </button>
                     </div>
                 </div>
@@ -362,7 +333,6 @@
 
         <div class="main-container">
             <div class="global-settings">
-                <h2>SETTINGS</h2>
                 <div class="control">
                     <label>EDO (Base Tones)</label>
                     <div class="value-control">
@@ -416,11 +386,11 @@
             <div class="tone-column">
                 <div class="column-title">BASE TONES</div>
                 <div class="tones-display" id="baseTones"></div>
-                <button class="play-button" id="playBase">▶ Play</button>
+                <button class="play-button" id="playBase">|></button>
             </div>
 
             <div class="euclidean-control">
-                <h3>EUCLIDEAN 1</h3>
+                <div class="section-label">euclidean 1</div>
                 <div class="control">
                     <label>Notes</label>
                     <div class="value-control">
@@ -482,11 +452,11 @@
             <div class="tone-column">
                 <div class="column-title">SCALE TONES</div>
                 <div class="tones-display" id="scaleTones"></div>
-                <button class="play-button" id="playScale">▶ Play</button>
+                <button class="play-button" id="playScale">|></button>
             </div>
 
             <div class="euclidean-control">
-                <h3>EUCLIDEAN 2</h3>
+                <div class="section-label">euclidean 2</div>
                 <div class="control">
                     <label>Notes</label>
                     <div class="value-control">
@@ -548,11 +518,11 @@
             <div class="tone-column">
                 <div class="column-title">CHORD TONES</div>
                 <div class="tones-display" id="chordTones"></div>
-                <button class="play-button" id="playChord">▶ Play</button>
+                <button class="play-button" id="playChord">|></button>
             </div>
 
             <div class="euclidean-control">
-                <h3>TONE SELECTION</h3>
+                <div class="section-label">tone selection</div>
                 <div class="control">
                     <label>Base</label>
                     <div class="value-control">
@@ -699,9 +669,7 @@
             <div class="tone-column">
                 <div class="column-title">SELECTED TONES</div>
                 <div class="tones-display" id="sequenceTones"></div>
-                <button class="play-button" id="playSequenceTones">
-                    ▶ Play
-                </button>
+                <button class="play-button" id="playSequenceTones">|></button>
             </div>
         </div>
 
